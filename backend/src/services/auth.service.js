@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const userRepository = require('../repositories/user.repository');
+const emailService = require('./email.service');
 
 class AuthService {
     async login(email, password) {
@@ -57,8 +58,17 @@ class AuthService {
             // Salvar token no banco
             await userRepository.setResetToken(email, resetToken, expiresAt.toISOString());
 
-            // TODO: Enviar email com o token
-            // await emailService.sendPasswordReset(email, resetToken);
+            // Enviar email com o token usando Microsoft Graph
+            try {
+                await emailService.sendPasswordResetEmail(email, resetToken, user.name);
+                console.log(`✅ Email de recuperação enviado para: ${email}`);
+            } catch (emailError) {
+                console.error('Erro ao enviar email:', emailError);
+                // Em desenvolvimento, continuar mesmo se falhar o email
+                if (process.env.NODE_ENV === 'production') {
+                    throw new Error('Falha ao enviar email de recuperação');
+                }
+            }
 
             return { 
                 message: 'Se o email existir, você receberá instruções para reset',

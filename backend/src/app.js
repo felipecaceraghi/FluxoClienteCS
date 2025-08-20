@@ -8,9 +8,13 @@ const rateLimit = require('express-rate-limit');
 const authRoutes = require('./routes/auth.routes');
 const companyRoutes = require('./routes/company.routes');
 const healthRoutes = require('./routes/health.routes');
+const syncRoutes = require('./routes/sync.routes');
 
 // Middleware
 const errorHandler = require('./middleware/errorHandler');
+
+// Services
+const schedulerService = require('./services/scheduler.service');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -48,6 +52,7 @@ app.use('/health', healthRoutes);
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/companies', companyRoutes);
+app.use('/api/sync', syncRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {
@@ -79,11 +84,26 @@ const server = app.listen(PORT, () => {
     console.log(`🔗 URL: http://localhost:${PORT}`);
     console.log(`💾 Database: ${process.env.DATABASE_PATH}`);
     console.log('───────────────────────────────');
+    
+    // Inicializar scheduler de jobs
+    try {
+        schedulerService.start();
+    } catch (error) {
+        console.error('❌ Erro ao inicializar scheduler:', error);
+    }
 });
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
     console.log('🔄 SIGTERM recebido. Fechando servidor...');
+    
+    // Parar scheduler
+    try {
+        schedulerService.stop();
+    } catch (error) {
+        console.error('❌ Erro ao parar scheduler:', error);
+    }
+    
     server.close(() => {
         console.log('✅ Servidor fechado com sucesso');
         process.exit(0);
@@ -92,6 +112,14 @@ process.on('SIGTERM', () => {
 
 process.on('SIGINT', () => {
     console.log('🔄 SIGINT recebido. Fechando servidor...');
+    
+    // Parar scheduler
+    try {
+        schedulerService.stop();
+    } catch (error) {
+        console.error('❌ Erro ao parar scheduler:', error);
+    }
+    
     server.close(() => {
         console.log('✅ Servidor fechado com sucesso');
         process.exit(0);

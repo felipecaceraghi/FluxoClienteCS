@@ -41,6 +41,10 @@ Thumbs.db
 src/storage/generated-reports/*
 !src/storage/generated-reports/.gitkeep
 
+# Downloaded SharePoint files
+src/storage/sharepoint-files/*
+!src/storage/sharepoint-files/.gitkeep
+
 # Temporary files
 tmp/
 temp/

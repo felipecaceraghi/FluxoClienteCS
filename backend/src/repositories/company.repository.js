@@ -50,23 +50,12 @@ class CompanyRepository {
     async findByCode(codigo) {
         try {
             const query = `
-                SELECT id, codigo, nome, dados_sharepoint, created_at, updated_at
+                SELECT id, codigo, nome, grupo, created_at, updated_at
                 FROM companies 
                 WHERE codigo = ? AND active = 1
             `;
             
             const company = await db.get(query, [codigo]);
-            
-            // Parse dos dados do SharePoint se existirem
-            if (company && company.dados_sharepoint) {
-                try {
-                    company.dados_sharepoint = JSON.parse(company.dados_sharepoint);
-                } catch (e) {
-                    console.warn('Erro ao fazer parse dos dados do SharePoint:', e);
-                    company.dados_sharepoint = null;
-                }
-            }
-            
             return company;
         } catch (error) {
             console.error('Erro ao buscar empresa por código:', error);
@@ -77,22 +66,12 @@ class CompanyRepository {
     async findById(id) {
         try {
             const query = `
-                SELECT id, codigo, nome, dados_sharepoint, created_at, updated_at
+                SELECT id, codigo, nome, grupo, created_at, updated_at
                 FROM companies 
                 WHERE id = ? AND active = 1
             `;
             
             const company = await db.get(query, [id]);
-            
-            if (company && company.dados_sharepoint) {
-                try {
-                    company.dados_sharepoint = JSON.parse(company.dados_sharepoint);
-                } catch (e) {
-                    console.warn('Erro ao fazer parse dos dados do SharePoint:', e);
-                    company.dados_sharepoint = null;
-                }
-            }
-            
             return company;
         } catch (error) {
             console.error('Erro ao buscar empresa por ID:', error);
@@ -105,19 +84,15 @@ class CompanyRepository {
             const id = uuidv4();
             
             const query = `
-                INSERT INTO companies (id, codigo, nome, dados_sharepoint, active)
+                INSERT INTO companies (id, codigo, nome, grupo, active)
                 VALUES (?, ?, ?, ?, ?)
             `;
-            
-            const dadosSharePoint = companyData.dados_sharepoint 
-                ? JSON.stringify(companyData.dados_sharepoint) 
-                : null;
             
             await db.run(query, [
                 id,
                 companyData.codigo,
                 companyData.nome,
-                dadosSharePoint,
+                companyData.grupo || null,
                 1
             ]);
 
@@ -138,9 +113,9 @@ class CompanyRepository {
                 values.push(companyData.nome);
             }
             
-            if (companyData.dados_sharepoint !== undefined) {
-                fields.push('dados_sharepoint = ?');
-                values.push(companyData.dados_sharepoint ? JSON.stringify(companyData.dados_sharepoint) : null);
+            if (companyData.grupo !== undefined) {
+                fields.push('grupo = ?');
+                values.push(companyData.grupo);
             }
             
             if (fields.length === 0) {
@@ -193,7 +168,7 @@ class CompanyRepository {
     async getAll() {
         try {
             const query = `
-                SELECT id, codigo, nome, created_at, updated_at
+                SELECT id, codigo, nome, grupo, created_at, updated_at
                 FROM companies 
                 WHERE active = 1
                 ORDER BY nome ASC
@@ -212,7 +187,7 @@ class CompanyRepository {
             const query = `
                 SELECT 
                     COUNT(*) as total,
-                    COUNT(CASE WHEN dados_sharepoint IS NOT NULL THEN 1 END) as com_dados_sharepoint,
+                    COUNT(CASE WHEN grupo IS NOT NULL THEN 1 END) as com_grupo,
                     MIN(created_at) as primeira_empresa,
                     MAX(updated_at) as ultima_atualizacao
                 FROM companies 
@@ -223,6 +198,101 @@ class CompanyRepository {
             return stats;
         } catch (error) {
             console.error('Erro ao buscar estatísticas das empresas:', error);
+            throw error;
+        }
+    }
+
+    // Métodos específicos para sincronização
+    async getAllActiveCodes() {
+        try {
+            const query = `
+                SELECT codigo FROM companies 
+                WHERE active = 1
+            `;
+            
+            const result = await db.query(query);
+            return result.map(row => row.codigo);
+        } catch (error) {
+            console.error('Erro ao buscar códigos ativos:', error);
+            throw error;
+        }
+    }
+
+    async deactivateByCode(codigo) {
+        try {
+            const query = `
+                UPDATE companies 
+                SET active = 0, updated_at = CURRENT_TIMESTAMP
+                WHERE codigo = ? AND active = 1
+            `;
+            
+            const result = await db.run(query, [codigo]);
+            return result.changes > 0;
+        } catch (error) {
+            console.error('Erro ao desativar empresa:', error);
+            throw error;
+        }
+    }
+
+    async upsertFromSharePoint(companyData) {
+        try {
+            // Verificar se empresa já existe
+            const existing = await this.findByCode(companyData.codigo);
+            
+            if (existing) {
+                // Verificar se precisa atualizar
+                const needsUpdate = 
+                    existing.nome !== companyData.nome || 
+                    existing.grupo !== companyData.grupo;
+                
+                if (needsUpdate) {
+                    const updated = await this.update(existing.id, {
+                        nome: companyData.nome,
+                        grupo: companyData.grupo
+                    });
+                    return { action: 'updated', company: updated };
+                } else {
+                    return { action: 'unchanged', company: existing };
+                }
+            } else {
+                // Criar nova empresa
+                const created = await this.create(companyData);
+                return { action: 'created', company: created };
+            }
+        } catch (error) {
+            console.error('Erro no upsert da empresa:', error);
+            throw error;
+        }
+    }
+
+    async bulkUpsertFromSharePoint(companiesData) {
+        try {
+            const results = {
+                created: 0,
+                updated: 0,
+                unchanged: 0,
+                errors: 0,
+                companies: []
+            };
+
+            for (const companyData of companiesData) {
+                try {
+                    const result = await this.upsertFromSharePoint(companyData);
+                    results[result.action]++;
+                    results.companies.push({
+                        codigo: companyData.codigo,
+                        action: result.action,
+                        company: result.company
+                    });
+                } catch (error) {
+                    results.errors++;
+                    console.error(`Erro ao processar empresa ${companyData.codigo}:`, error);
+                }
+            }
+
+            return results;
+        } catch (error) {
+            console.error('Erro no bulk upsert:', error);
             throw error;
         }
     }

@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS companies (
     id TEXT PRIMARY KEY,
     codigo VARCHAR(50) UNIQUE NOT NULL,
     nome VARCHAR(255) NOT NULL,
-    dados_sharepoint TEXT, -- JSON com dados brutos do SharePoint
+    grupo VARCHAR(255),
     active BOOLEAN DEFAULT 1,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
