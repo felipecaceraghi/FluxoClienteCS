@@ -1,0 +1,840 @@
+const ExcelJS = require('exceljs');
+const fs = require('fs');
+const path = require('path');
+const logger = require('../utils/logger');
+const axios = require('axios');
+
+class XlsxGeneratorService {
+    constructor() {
+        this.outputDir = path.join(__dirname, '../storage/generated-reports');
+        this.ensureOutputDir();
+        
+        this.workbook = new ExcelJS.Workbook();
+        this.worksheet = null;
+        this.currentRow = 1;
+        this.dataRows = []; // Array para armazenar todas as linhas antes da escrita
+        
+        this.boldLabels = [
+            'Apelido:', 'Código no sistema Domínio:', 'Razão Social:', 'CNPJ:', 
+            'Vigência Inicial:', 'Site:', 'Plano Contratado:', 'SLA Para Retorno:',
+            'Serviços Contratados', 'Serviço 1:', 'Serviço 2:', 'Serviço 3:', 'Serviço 4:', 'Serviço 5:', 'Serviço 6:',
+            'Contato Principal', 'Nome:', 'Cargo:', 'E-mail:', 'Celular:',
+            'Entendimento do Negócio', 'Faturamento anual:', 'Regime Tributário:',
+            'NF de Entrada:', 'NF de Saída:', 'CT-es de Entrada:', 'CT-es de Saída:',
+            'NF de Prestados:', 'NF de Tomados:', 'Funcionários PJ:', 'Centros de Custo:',
+            'Folha de Pagamento', 'Funcionários CLT:', 'Pró-Labore:', 'Estagiários:',
+            'Aprendizes:', 'Autônomos - RPA:', 'Domésticas CLT:', 'Sistemas',
+            'Contábil e Fiscal:', 'Contabilidade e Fiscal', 'Deadline:', 'CNAE:',
+            'Comercial', 'Closer:', 'Prospector:', 'Obs:'
+        ];
+
+        // Definir estilos
+        this.styles = {
+            default: {
+                font: { name: 'Calibri', size: 11 },
+                alignment: { vertical: 'top', horizontal: 'left' }
+            },
+            bold: {
+                font: { name: 'Calibri', size: 11, bold: true },
+                alignment: { vertical: 'top', horizontal: 'left' }
+            },
+            sectionHeader: {
+                font: { name: 'Calibri', size: 12, bold: true },
+                alignment: { vertical: 'top', horizontal: 'left' },
+                fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFADDBDC' } }
+            },
+            mainHeader: {
+                font: { name: 'Calibri', size: 25, bold: true, color: { argb: 'FF000000' } },
+                alignment: { vertical: 'middle', horizontal: 'left' }
+            },
+            companyName: {
+                font: { name: 'Calibri', size: 11, bold: true },
+                alignment: { vertical: 'top', horizontal: 'left' }
+            }
+        };
+
+        // Lista de nomes de empresas para aplicar negrito
+        this.companyNames = [];
+        
+        // Configuração de truncamento
+        this.maxCompanyNameLength = 52;
+    }
+
+    ensureOutputDir() {
+        if (!fs.existsSync(this.outputDir)) {
+            fs.mkdirSync(this.outputDir, { recursive: true });
+            logger.info('📁 Diretório de relatórios criado', { path: this.outputDir });
+        }
+    }
+
+    // Função para converter valores para números nativos (evita "número armazenado como texto")
+    convertToNumber(value, defaultValue = 0) {
+        if (value === null || value === undefined || value === '') {
+            return defaultValue;
+        }
+        
+        // Se já é um número, retorna como está
+        if (typeof value === 'number') {
+            return value;
+        }
+        
+        // Se é string, tenta converter para número
+        if (typeof value === 'string') {
+            const trimmed = value.trim();
+            
+            // Se string vazia após trim, retorna default
+            if (trimmed === '') {
+                return defaultValue;
+            }
+            
+            // Tenta converter para número
+            const parsed = parseFloat(trimmed);
+            
+            // Se conversão foi bem sucedida e é um número válido
+            if (!isNaN(parsed) && isFinite(parsed)) {
+                return parsed;
+            }
+        }
+        
+        // Se não conseguiu converter, retorna o valor original
+        return value;
+    }
+
+    truncateCompanyName(name) {
+        if (!name) return '';
+        const nameStr = String(name).trim();
+        if (nameStr.length <= this.maxCompanyNameLength) {
+            return nameStr;
+        }
+        const truncated = nameStr.substring(0, this.maxCompanyNameLength - 3) + '...';
+        logger.info(`✂️ Nome truncado: "${nameStr}" → "${truncated}" (${nameStr.length} → ${truncated.length} chars)`);
+        return truncated;
+    }
+
+    // Função para buscar dados da API
+    async fetchGroupData(groupName) {
+        try {
+            const API_BASE_URL = 'http://localhost:3001/api/group-search';
+            const encodedGroupName = encodeURIComponent(groupName);
+            const response = await axios.get(`${API_BASE_URL}/${encodedGroupName}`, {
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (response.data && response.data.success && response.data.empresas) {
+                return response.data.empresas;
+            } else {
+                throw new Error('Formato de resposta inválido da API');
+            }
+        } catch (error) {
+            logger.error('Erro ao buscar dados da API:', error.message);
+            throw error;
+        }
+    }
+
+    // Função para definir larguras fixas das colunas
+    getFixedColumnWidths() {
+        logger.info('📐 Aplicando larguras fixas das colunas...');
+        
+        const fixedWidths = [
+            1.22,  // Coluna A (vazia)
+            1.89,  // Coluna B (vazia)
+            30,    // Coluna C (labels)
+            50.11, // Coluna D
+            54.78, // Coluna E  
+            35,    // Coluna F
+            14.89, // Coluna G
+            1.22,  // Coluna H (vazia, mesmo tamanho da A)
+            1.89   // Coluna I (vazia, mesmo tamanho da B)
+        ];
+        
+        logger.info('📊 Larguras fixas:', fixedWidths.map((w, i) => `${String.fromCharCode(65 + i)}:${w}`).join(', '));
+        logger.info('🙈 Colunas J+ serão ocultadas');
+        
+        return fixedWidths;
+    }
+
+    // Função para configurar larguras das colunas fixas e ocultar colunas desnecessárias
+    setupColumns(fixedWidths) {
+        // Aplica larguras fixas até a coluna I
+        const columns = fixedWidths.map(width => ({ width }));
+        this.worksheet.columns = columns;
+        
+        // Oculta todas as colunas após I (coluna 9, índice 8)
+        for (let colIndex = 9; colIndex <= 50; colIndex++) { // Oculta J, K, L... até uma coluna alta
+            const column = this.worksheet.getColumn(colIndex + 1);
+            column.hidden = true;
+        }
+        
+        this.worksheet.views = [
+            { showGridLines: false }
+        ];
+        
+        logger.info('✅ Larguras fixas das colunas configuradas (A-I)');
+        logger.info('🙈 Colunas J+ ocultadas');
+        logger.info('🔲 Linhas de grade desativadas');
+    }
+
+    // Função para adicionar dados à estrutura interna (não escreve na planilha ainda)
+    addDataRow(data, styleType = 'default') {
+        const paddedData = [...data];
+        while (paddedData.length < 9) paddedData.push(''); // Apenas até coluna I (9 colunas)
+        
+        this.dataRows.push({
+            data: paddedData,
+            styleType: styleType,
+            rowNumber: this.currentRow
+        });
+        
+        this.currentRow++;
+        return this.dataRows.length - 1;
+    }
+
+    // Função para adicionar linha vazia à estrutura interna
+    addEmptyDataRow() {
+        return this.addDataRow(['', '', '', '', '', '', '', '', '']); // A até I (9 colunas)
+    }
+
+    // Função para escrever todos os dados na planilha com formatação
+    writeDataToWorksheet() {
+        logger.info('📝 Escrevendo dados na planilha com formatação...');
+        
+        this.dataRows.forEach((rowData, index) => {
+            const row = this.worksheet.addRow(rowData.data);
+            
+            row.eachCell((cell, colNumber) => {
+                cell.font = this.styles[rowData.styleType].font;
+                cell.alignment = this.styles[rowData.styleType].alignment;
+                if (this.styles[rowData.styleType].fill) {
+                    cell.fill = this.styles[rowData.styleType].fill;
+                }
+            });
+
+            let isSectionHeader = false;
+            if (rowData.data[2]) {
+                const cellValue = String(rowData.data[2]).trim();
+                isSectionHeader = ['Serviços Contratados', 'Contato Principal', 'Entendimento do Negócio', 
+                                 'Folha de Pagamento', 'Sistemas', 'Contabilidade e Fiscal', 'Comercial'].includes(cellValue);
+            }
+
+            if (rowData.data[2]) {
+                const cellValue = String(rowData.data[2]).trim();
+                const isLabel = this.boldLabels.includes(cellValue) ||
+                               cellValue.startsWith('Novo cliente -') ||
+                               cellValue.startsWith('Empresas abertas') ||
+                               cellValue.startsWith('Haverá Cobrança') ||
+                               cellValue.startsWith('Vencimento:') ||
+                               cellValue.startsWith('Faturar por:');
+                
+                if (isLabel) {
+                    const cellC = row.getCell(3);
+                    
+                    if (isSectionHeader) {
+                        for (let colNum = 3; colNum <= 9; colNum++) { // Apenas até coluna I
+                            const cell = row.getCell(colNum);
+                            cell.font = this.styles.sectionHeader.font;
+                            cell.fill = this.styles.sectionHeader.fill;
+                        }
+                    } else if (cellValue.startsWith('Novo cliente -')) {
+                        cellC.font = this.styles.mainHeader.font;
+                        cellC.alignment = this.styles.mainHeader.alignment;
+                    } else {
+                        cellC.font = this.styles.bold.font;
+                    }
+                }
+            }
+            
+            // ================== FORMATAÇÃO DE MOEDA ==================
+            // Verifica se é a linha de "Faturamento anual:" para aplicar o formato de moeda
+            if (rowData.data[2] && String(rowData.data[2]).trim() === 'Faturamento anual:') {
+                // Itera sobre as colunas D, E, F (índices 3, 4, 5)
+                for (let colIndex = 3; colIndex <= 5; colIndex++) {
+                    const cell = row.getCell(colIndex + 1);
+                    // Aplica o formato apenas se o valor for um número
+                    if (typeof cell.value === 'number') {
+                        cell.numFmt = '"R$" #,##0.00';
+                    }
+                }
+            }
+            // ==========================================================
+
+            for (let colIndex = 3; colIndex <= 5; colIndex++) {
+                if (rowData.data[colIndex]) {
+                    const cellValue = String(rowData.data[colIndex]).trim();
+                    const isCompanyName = this.companyNames.includes(cellValue);
+                    
+                    if (isCompanyName && !isSectionHeader) {
+                        const cell = row.getCell(colIndex + 1);
+                        cell.font = this.styles.companyName.font;
+                    }
+                }
+            }
+
+            if (rowData.data[2] && String(rowData.data[2]).trim() === 'Site:') {
+                for (let colIndex = 3; colIndex <= 5; colIndex++) {
+                    if (rowData.data[colIndex] && String(rowData.data[colIndex]).trim().startsWith('http')) {
+                        const cell = row.getCell(colIndex + 1);
+                        const url = String(rowData.data[colIndex]).trim();
+                        cell.value = {
+                            text: url,
+                            hyperlink: url
+                        };
+                        cell.font = {
+                            ...this.styles.default.font,
+                            color: { argb: 'FF000000' },
+                            underline: true
+                        };
+                    }
+                }
+            }
+        });
+
+        this.applyMergedCells();
+    }
+
+    // Função para adicionar imagem na linha 3
+    async addImageToWorksheet() {
+        try {
+            // Verifica se o arquivo image.png existe no diretório
+            const imagePath = path.join(__dirname, '../image.png');
+            if (!fs.existsSync(imagePath)) {
+                logger.info('⚠️  Arquivo image.png não encontrado. Pulando inserção da imagem.');
+                return;
+            }
+
+            logger.info('📁 Arquivo image.png encontrado, processando...');
+
+            // Lê o arquivo de imagem
+            const imageBuffer = fs.readFileSync(imagePath);
+            logger.info(`📊 Tamanho da imagem: ${imageBuffer.length} bytes`);
+            
+            // Adiciona a imagem ao workbook
+            const imageId = this.workbook.addImage({
+                buffer: imageBuffer,
+                extension: 'png',
+            });
+
+            logger.info(`🆔 ID da imagem no workbook: ${imageId}`);
+
+            // Ajusta a altura da linha 3 - menor altura vertical
+            const row3 = this.worksheet.getRow(3);
+            row3.height = 60; // Altura menor para não ocupar muito espaço vertical
+
+            // Insere a imagem na linha 3 - começando na coluna C
+            this.worksheet.addImage(imageId, {
+                tl: { col: 2, row: 2 }, // Top-left: coluna C (2), linha 3 (índice 2) 
+                ext: { width: 1500, height: 55 }, // Dimensões perfeitas para logo largo
+                editAs: 'oneCell'
+            });
+
+            logger.info('🖼️  Imagem inserida na linha 3 (C3)');
+        } catch (error) {
+            logger.info('⚠️  Erro ao inserir imagem:', error.message);
+            logger.info('Continuando sem a imagem...');
+        }
+    }
+
+    applyMergedCells() {
+        this.dataRows.forEach((rowData, index) => {
+            if (rowData.data[2] && String(rowData.data[2]).startsWith('Novo cliente -')) {
+                const excelRowNumber = index + 1;
+                this.worksheet.mergeCells(`C${excelRowNumber}:I${excelRowNumber}`); // Mescla apenas até I
+                
+                const mergedCell = this.worksheet.getCell(`C${excelRowNumber}`);
+                mergedCell.font = this.styles.mainHeader.font;
+                mergedCell.alignment = this.styles.mainHeader.alignment;
+            }
+        });
+    }
+
+    addGroupHeader(groupName) {
+        // Linha 1: Vazia (espaçamento)
+        this.addEmptyDataRow();
+        
+        // Linha 2: Vazia (espaçamento) 
+        this.addEmptyDataRow();
+        
+        // Linha 3: Será reservada para a imagem (linha vazia aqui, imagem será adicionada depois)
+        this.addEmptyDataRow();
+        
+        // Linha 4: Novo cliente - agora começando na coluna C
+        this.addDataRow(['', '', `Novo cliente - ${groupName}`, '', '', '', '', '', '']);
+        this.addEmptyDataRow();
+    }
+
+    chunkArray(array, size) {
+        const chunks = [];
+        for (let i = 0; i < array.length; i += size) {
+            chunks.push(array.slice(i, i + size));
+        }
+        return chunks;
+    }
+
+    addCompanyBasicInfo(companies) {
+        const chunks = this.chunkArray(companies, 3);
+        
+        chunks.forEach(chunk => {
+            const apelidoRow = ['', '', 'Apelido:'];
+            chunk.forEach(company => {
+                apelidoRow.push(this.truncateCompanyName(company.nome_fantasia));
+            });
+            while (apelidoRow.length < 9) apelidoRow.push('');
+            this.addDataRow(apelidoRow);
+
+            const codigoRow = ['', '', 'Código no sistema Domínio:'];
+            chunk.forEach(company => {
+                codigoRow.push(this.convertToNumber(company.codigo, ''));
+            });
+            while (codigoRow.length < 9) codigoRow.push('');
+            this.addDataRow(codigoRow);
+
+            const razaoRow = ['', '', 'Razão Social:'];
+            chunk.forEach(company => {
+                razaoRow.push(company.razao_social || '');
+            });
+            while (razaoRow.length < 9) razaoRow.push('');
+            this.addDataRow(razaoRow);
+
+            const cnpjRow = ['', '', 'CNPJ:'];
+            chunk.forEach(company => {
+                cnpjRow.push(company.cnpj || '');
+            });
+            while (cnpjRow.length < 9) cnpjRow.push('');
+            this.addDataRow(cnpjRow);
+
+            const vigenciaRow = ['', '', 'Vigência Inicial:'];
+            chunk.forEach(company => {
+                const dataInicio = company.inicio_contrato ? new Date(company.inicio_contrato) : new Date();
+                const mes = String(dataInicio.getMonth() + 1).padStart(2, '0');
+                const ano = dataInicio.getFullYear();
+                vigenciaRow.push(`${mes}/${ano}`);
+            });
+            while (vigenciaRow.length < 9) vigenciaRow.push('');
+            this.addDataRow(vigenciaRow);
+
+            const siteRow = ['', '', 'Site:'];
+            chunk.forEach(company => {
+                siteRow.push('https://teklamatik.com.br/');
+            });
+            while (siteRow.length < 9) siteRow.push('');
+            this.addDataRow(siteRow);
+
+            const planoRow = ['', '', 'Plano Contratado:'];
+            chunk.forEach(company => {
+                planoRow.push(company.plano_contratado || 'Advanced');
+            });
+            while (planoRow.length < 9) planoRow.push('');
+            this.addDataRow(planoRow);
+
+            const slaRow = ['', '', 'SLA Para Retorno:'];
+            chunk.forEach(company => {
+                slaRow.push(company.sla || '48 horas úteis');
+            });
+            while (slaRow.length < 9) slaRow.push('');
+            this.addDataRow(slaRow);
+
+            this.addEmptyDataRow();
+        });
+    }
+
+    addContractedServices(companies) {
+        this.addDataRow(['', '', 'Serviços Contratados', '', '', '', '', '', '']);
+
+        // Mapeamento de todos os serviços disponíveis
+        const servicosDisponiveis = [
+            { campo: 'bpo_contabil', nome: 'BPO Contábil' },
+            { campo: 'bpo_fiscal', nome: 'BPO Fiscal' },
+            { campo: 'bpo_folha', nome: 'BPO Folha' },
+            { campo: 'bpo_financeiro', nome: 'BPO Financeiro' },
+            { campo: 'bpo_rh', nome: 'BPO RH' },
+            { campo: 'bpo_cnd', nome: 'Certidões Negativas' }
+        ];
+
+        // Filtra apenas os serviços contratados (que têm "Sim") e numera sequencialmente
+        const servicosContratados = [];
+        let numeroServico = 1;
+
+        servicosDisponiveis.forEach(servico => {
+            if (companies.some(c => c[servico.campo] === 'Sim')) {
+                servicosContratados.push(['', '', `Serviço ${numeroServico}:`, servico.nome, '', '', '', '', '']);
+                numeroServico++;
+                logger.info(`📋 Serviço contratado: ${servico.nome}`);
+            }
+        });
+
+        // Adiciona os serviços contratados à planilha
+        servicosContratados.forEach(servico => {
+            this.addDataRow(servico);
+        });
+
+        // Se nenhum serviço foi contratado, adiciona uma linha indicando isso
+        if (servicosContratados.length === 0) {
+            this.addDataRow(['', '', 'Nenhum serviço contratado', '', '', '', '', '', '']);
+        }
+
+        this.addEmptyDataRow();
+    }
+
+    addMainContact(companies) {
+        const firstCompany = companies[0];
+        
+        this.addDataRow(['', '', 'Contato Principal', '', '', '', '', '', '']);
+        this.addDataRow(['', '', 'Nome:', firstCompany.contato_principal_nome || '', '', '', '', '', '']);
+        this.addDataRow(['', '', 'Cargo:', firstCompany.contato_principal_cargo || '', '', '', '', '', '']);
+        this.addDataRow(['', '', 'E-mail:', firstCompany.contato_principal_email || '', '', '', '', '', '']);
+        this.addDataRow(['', '', 'Celular:', firstCompany.contato_principal_celular || '', '', '', '', '', '']);
+        this.addEmptyDataRow();
+    }
+
+    // Função para adicionar entendimento do negócio - VERSÃO CORRIGIDA
+    addBusinessUnderstanding(companies) {
+        const chunks = this.chunkArray(companies, 3);
+        
+        chunks.forEach(chunk => {
+            const headerRow = ['', '', 'Entendimento do Negócio'];
+            chunk.forEach(company => {
+                headerRow.push(this.truncateCompanyName(company.nome_fantasia));
+            });
+            while (headerRow.length < 9) headerRow.push('');
+            this.addDataRow(headerRow);
+
+            // ================== LÓGICA DE FATURAMENTO CORRIGIDA ==================
+            // Faturamento anual
+            const faturamentoRow = ['', '', 'Faturamento anual:'];
+            chunk.forEach(company => {
+                const faturamentoString = company.faturamento_anual;
+                
+                if (typeof faturamentoString === 'string' && faturamentoString.trim() !== '') {
+                    // Remove "R$" e espaços
+                    let valor = faturamentoString.replace(/R\$|\s/g, '');
+                    
+                    // Detecta o formato da moeda
+                    let valorNumerico;
+                    
+                    // Formato brasileiro: R$ 3.500.000,00 (ponto = milhares, vírgula = decimal)
+                    if (valor.includes(',') && valor.lastIndexOf(',') > valor.lastIndexOf('.')) {
+                        // Remove pontos (separadores de milhares) e substitui vírgula por ponto
+                        valorNumerico = parseFloat(valor.replace(/\./g, '').replace(',', '.'));
+                        logger.info(`💰 Formato brasileiro detectado: "${faturamentoString}" → ${valorNumerico}`);
+                    }
+                    // Formato americano: R$ 3,500,000.00 (vírgula = milhares, ponto = decimal)
+                    else if (valor.includes('.') && valor.lastIndexOf('.') > valor.lastIndexOf(',')) {
+                        // Remove vírgulas (separadores de milhares), mantém o ponto decimal
+                        valorNumerico = parseFloat(valor.replace(/,/g, ''));
+                        logger.info(`💰 Formato americano detectado: "${faturamentoString}" → ${valorNumerico}`);
+                    }
+                    // Apenas números com ponto (formato americano simples)
+                    else if (valor.includes('.') && !valor.includes(',')) {
+                        valorNumerico = parseFloat(valor);
+                        logger.info(`💰 Formato americano simples: "${faturamentoString}" → ${valorNumerico}`);
+                    }
+                    // Apenas números com vírgula (formato brasileiro simples)
+                    else if (valor.includes(',') && !valor.includes('.')) {
+                        valorNumerico = parseFloat(valor.replace(',', '.'));
+                        logger.info(`💰 Formato brasileiro simples: "${faturamentoString}" → ${valorNumerico}`);
+                    }
+                    // Apenas números inteiros
+                    else {
+                        valorNumerico = parseFloat(valor);
+                        logger.info(`💰 Formato numérico puro: "${faturamentoString}" → ${valorNumerico}`);
+                    }
+
+                    if (!isNaN(valorNumerico) && valorNumerico > 0) {
+                        // Adiciona o NÚMERO puro. A formatação será feita na escrita da planilha.
+                        faturamentoRow.push(valorNumerico);
+                    } else {
+                        faturamentoRow.push('Sem Faturamento');
+                        logger.info(`❌ Erro no faturamento: "${faturamentoString}" → NaN`);
+                    }
+                } else {
+                    faturamentoRow.push('Sem Faturamento');
+                }
+            });
+            while (faturamentoRow.length < 9) faturamentoRow.push('');
+            this.addDataRow(faturamentoRow);
+            // ======================================================================
+
+            const fields = [
+                { label: 'Regime Tributário:', field: 'regime_tributario_atual', default: 'Lucro Presumido' },
+                { label: 'NF de Entrada:', field: 'nf_entradas', default: 0, isNumeric: true },
+                { label: 'NF de Saída:', field: 'nf_saidas', default: 0, isNumeric: true },
+                { label: 'CT-es de Entrada:', field: 'ctes_entrada', default: 0, isNumeric: true },
+                { label: 'CT-es de Saída:', field: 'ctes_saida', default: 0, isNumeric: true },
+                { label: 'NF de Prestados:', field: 'nf_servicos_prestados', default: 0, isNumeric: true },
+                { label: 'NF de Tomados:', field: 'servicos_tomados', default: 0, isNumeric: true },
+                { label: 'Funcionários PJ:', field: 'nf_pjs', default: 0, isNumeric: true },
+                { label: 'Centros de Custo:', field: 'centro_custo_quantidade', default: 0, isNumeric: true }
+            ];
+
+            fields.forEach(({ label, field, default: defaultValue, isNumeric }) => {
+                const row = ['', '', label];
+                chunk.forEach(company => {
+                    if (isNumeric) {
+                        row.push(this.convertToNumber(company[field], defaultValue));
+                    } else {
+                        row.push(company[field] || defaultValue);
+                    }
+                });
+                while (row.length < 9) row.push('');
+                this.addDataRow(row);
+            });
+
+            this.addEmptyDataRow();
+        });
+    }
+
+    addPayroll(companies) {
+        const chunks = this.chunkArray(companies, 3);
+        
+        chunks.forEach(chunk => {
+            const headerRow = ['', '', 'Folha de Pagamento'];
+            chunk.forEach(company => {
+                headerRow.push(this.truncateCompanyName(company.nome_fantasia));
+            });
+            while (headerRow.length < 9) headerRow.push('');
+            this.addDataRow(headerRow);
+
+            const fields = [
+                { label: 'Funcionários CLT:', field: 'colab_clt', isNumeric: true },
+                { label: 'Pró-Labore:', field: 'pro_labore', isNumeric: true },
+                { label: 'Estagiários:', field: 'estagiarios', isNumeric: true },
+                { label: 'Aprendizes:', field: 'aprendizes', isNumeric: true },
+                { label: 'Autônomos - RPA:', field: 'rpa', isNumeric: true },
+                { label: 'Domésticas CLT:', field: 'domesticas_clt', isNumeric: true }
+            ];
+
+            fields.forEach(({ label, field, isNumeric }) => {
+                const row = ['', '', label];
+                chunk.forEach(company => {
+                    if (isNumeric) {
+                        row.push(this.convertToNumber(company[field], 0));
+                    } else {
+                        row.push(company[field] || 0);
+                    }
+                });
+                while (row.length < 9) row.push('');
+                this.addDataRow(row);
+            });
+
+            this.addEmptyDataRow();
+        });
+    }
+
+    addSystemsInfo(companies) {
+        const firstCompany = companies[0];
+        
+        this.addEmptyDataRow();
+        this.addDataRow(['', '', 'Sistemas', '', '', '', '', '', '']);
+        this.addDataRow(['', '', 'Contábil e Fiscal:', firstCompany.sistema_contabil || 'WK Radar', '', '', '', '', '']);
+        this.addEmptyDataRow();
+    }
+
+    addAccountingInfo(companies) {
+        const chunks = this.chunkArray(companies, 3);
+        
+        chunks.forEach(chunk => {
+            const headerRow = ['', '', 'Contabilidade e Fiscal'];
+            chunk.forEach(company => {
+                headerRow.push(this.truncateCompanyName(company.nome_fantasia));
+            });
+            while (headerRow.length < 9) headerRow.push('');
+            this.addDataRow(headerRow);
+
+            const deadlineRow = ['', '', 'Deadline:'];
+            chunk.forEach(company => {
+                // Monta deadline dinâmico baseado nos campos da API
+                let deadline = '';
+                if (company.deadline_periodicidade) {
+                    deadline = `${company.deadline_util_corrente || 'Corrente'}, dia ${company.deadline_periodicidade}`;
+                } else {
+                    deadline = 'Trimestral, dia 30'; // Fallback
+                }
+                deadlineRow.push(deadline);
+            });
+            while (deadlineRow.length < 9) deadlineRow.push('');
+            this.addDataRow(deadlineRow);
+
+            const cnaeRow = ['', '', 'CNAE:'];
+            chunk.forEach(company => {
+                cnaeRow.push(company.atividade_especialidade || 'Não informado');
+            });
+            while (cnaeRow.length < 9) cnaeRow.push('');
+            this.addDataRow(cnaeRow);
+
+            this.addEmptyDataRow();
+        });
+    }
+
+    addCommercialInfo(companies) {
+        const firstCompany = companies[0];
+        
+        // Empresas abertas pela Go Further - agora vem da API
+        this.addDataRow(['', '', 'Empresas abertas pela Go Further?', '', firstCompany.empresa_aberta_go || 'Não', '', '', '', '']);
+        this.addEmptyDataRow();
+        
+        // Cobrança de Implantação - agora vem da API
+        this.addDataRow(['', '', 'Haverá Cobrança de Implantação:', '', firstCompany.implantacao || 'Não', '', '', '', '']);
+        this.addDataRow(['', '', 'Vencimento:', '', 'Vencimento de forma conjunta ao primeiro honorário mensal', '', '', '', '']);
+        this.addEmptyDataRow();
+        
+        this.addDataRow(['', '', 'Faturar por:', '', '', '', '', '', '']);
+        
+        // Faturar por - agora vem da API
+        if (companies.some(c => c.bpo_contabil === 'Sim')) {
+            const faturadoContabil = firstCompany.bpo_contabil_faturado || 'GF Accounting';
+            this.addDataRow(['', '', 'Contábil', '', faturadoContabil, '', '', '', '']);
+            logger.info(`📋 Contábil faturado por: ${faturadoContabil}`);
+        }
+        
+        if (companies.some(c => c.bpo_fiscal === 'Sim')) {
+            const faturadoFiscal = firstCompany.bpo_fiscal_faturado || 'E.Reeve';
+            this.addDataRow(['', '', 'Fiscal', '', faturadoFiscal, '', '', '', '']);
+            logger.info(`📋 Fiscal faturado por: ${faturadoFiscal}`);
+        }
+        
+        if (companies.some(c => c.bpo_cnd === 'Sim')) {
+            const faturadoCnd = firstCompany.bpo_legal_faturado || 'E.Reeve';
+            this.addDataRow(['', '', 'Certidão Negativa', '', faturadoCnd, '', '', '', '']);
+            logger.info(`📋 Certidão Negativa faturada por: ${faturadoCnd}`);
+        }
+        
+        this.addEmptyDataRow();
+        
+        this.addDataRow(['', '', 'Comercial', '', '', '', '', '', '']);
+        this.addDataRow(['', '', 'Closer:', firstCompany.closer || '', '', '', '', '', '']);
+        this.addDataRow(['', '', 'Prospector:', firstCompany.prospector || '', '', '', '', '', '']);
+        
+        if (firstCompany.observacoes_cadastro) {
+            this.addDataRow(['', '', 'Obs:', firstCompany.observacoes_cadastro, '', '', '', '', '']);
+        }
+    }
+
+    async generateForGroup(groupName) {
+        try {
+            logger.info(`Buscando dados para o grupo: ${groupName}`);
+            const companies = await this.fetchGroupData(groupName);
+            
+            if (!companies || companies.length === 0) {
+                throw new Error('Nenhuma empresa encontrada para o grupo especificado');
+            }
+
+            logger.info(`Encontradas ${companies.length} empresas. Gerando planilha...`);
+
+            // Reset das variáveis para nova geração
+            this.workbook = new ExcelJS.Workbook();
+            this.worksheet = null;
+            this.currentRow = 1;
+            this.dataRows = [];
+
+            this.companyNames = companies.map(company => this.truncateCompanyName(company.nome_fantasia)).filter(name => name.trim() !== '');
+            logger.info(`📋 Nomes de empresas identificados: ${this.companyNames.length} (máx. ${this.maxCompanyNameLength} chars)`);
+
+            logger.info('📊 Coletando todos os dados...');
+            this.addGroupHeader(groupName);
+            this.addCompanyBasicInfo(companies);
+            this.addContractedServices(companies);
+            this.addMainContact(companies);
+            this.addBusinessUnderstanding(companies);
+            this.addPayroll(companies);
+            this.addSystemsInfo(companies);
+            this.addAccountingInfo(companies);
+            this.addCommercialInfo(companies);
+
+            const fixedWidths = this.getFixedColumnWidths();
+
+            this.worksheet = this.workbook.addWorksheet('Board');
+            this.setupColumns(fixedWidths);
+
+            this.writeDataToWorksheet();
+
+            // Adiciona a imagem na linha 3
+            await this.addImageToWorksheet();
+
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            const fileName = `${groupName.replace(/\s+/g, '_')}_Ficha_Entrada_${timestamp}.xlsx`;
+            const filePath = path.join(this.outputDir, fileName);
+            
+            logger.info('💾 Salvando arquivo...');
+            await this.workbook.xlsx.writeFile(filePath);
+
+            logger.info('✅ Planilha gerada com sucesso!');
+            logger.info(`📁 Arquivo: ${fileName}`);
+            logger.info(`📈 Total de empresas: ${companies.length}`);
+            logger.info(`📄 Total de linhas: ${this.currentRow}`);
+
+            return {
+                success: true,
+                fileName: fileName,
+                filePath: filePath,
+                stats: {
+                    companies: companies.length,
+                    rows: this.currentRow
+                }
+            };
+
+        } catch (error) {
+            logger.error('Erro ao gerar planilha:', error.message);
+            throw error;
+        }
+    }
+
+    // Método para manter compatibilidade com controller existente
+    async generateXlsx(empresas, tipoRelatorio, nomeGrupo, userId) {
+        try {
+            if (!nomeGrupo) {
+                throw new Error('Nome do grupo é obrigatório');
+            }
+
+            return await this.generateForGroup(nomeGrupo);
+        } catch (error) {
+            logger.error('Erro no generateXlsx:', error);
+            throw error;
+        }
+    }
+
+    async downloadFile(fileName) {
+        const filePath = path.join(this.outputDir, fileName);
+        
+        if (!fs.existsSync(filePath)) {
+            throw new Error('Arquivo não encontrado');
+        }
+
+        return {
+            filePath: filePath,
+            fileName: fileName,
+            mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        };
+    }
+
+    listAvailableFiles() {
+        try {
+            if (!fs.existsSync(this.outputDir)) {
+                return [];
+            }
+
+            const files = fs.readdirSync(this.outputDir)
+                .filter(file => file.endsWith('.xlsx'))
+                .map(file => {
+                    const filePath = path.join(this.outputDir, file);
+                    const stats = fs.statSync(filePath);
+                    
+                    return {
+                        fileName: file,
+                        downloadUrl: `/api/xlsx-generator/download/${file}`,
+                        tamanho: stats.size,
+                        criadoEm: stats.birthtime,
+                        modificadoEm: stats.mtime
+                    };
+                })
+                .sort((a, b) => new Date(b.criadoEm) - new Date(a.criadoEm));
+
+            return files;
+        } catch (error) {
+            logger.error('Erro ao listar arquivos:', error);
+            return [];
+        }
+    }
+}
+
+module.exports = new XlsxGeneratorService();

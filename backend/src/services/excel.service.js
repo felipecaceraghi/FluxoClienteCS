@@ -134,6 +134,260 @@ class ExcelReaderService {
         }
     }
 
+    // Método para extrair dados completos da planilha
+    async parseFullCompanyData(filePath) {
+        try {
+            logger.info('📖 Analisando dados completos da planilha...');
+
+            // Ler arquivo Excel
+            const rawData = this.readExcelFile(filePath);
+
+            // Parsear dados completos usando o método dedicado
+            const companies = this.parseFullCompanyDataFromRaw(rawData);
+
+            return companies;
+        } catch (error) {
+            logger.error('❌ Erro ao processar dados completos:', error);
+            throw error;
+        }
+    }
+
+    parseFullCompanyDataFromRaw(rawData) {
+        try {
+            logger.info('🔍 Analisando dados completos da planilha...');
+
+            // Header começa na linha 5 (índice 4)
+            const headerRowIndex = 4;
+            
+            if (rawData.length <= headerRowIndex) {
+                throw new Error('Planilha não possui dados suficientes');
+            }
+
+            // Extrair dados a partir da linha 6 (índice 5)
+            const companies = [];
+            
+            for (let i = headerRowIndex + 1; i < rawData.length; i++) {
+                const row = rawData[i];
+                
+                // Mapear todos os campos conforme especificação
+                const codigo = row[0] ? String(row[0]).trim() : '';
+                
+                // Só processar se tiver código
+                if (!codigo) continue;
+
+                const companyData = {
+                    rowNumber: i + 1,
+                    codigo: this.preserveOriginalValue(row[0]),
+                    nome_fantasia: this.preserveOriginalValue(row[1]),
+                    grupo: this.preserveOriginalValue(row[2]),
+                    razao_social: this.preserveOriginalValue(row[3]),
+                    inicio_contrato: this.parseDate(row[4]),
+                    termino_contrato: this.parseDate(row[5]),
+                    situacao: this.preserveOriginalValue(row[6]),
+                    cnpj: this.preserveOriginalValue(row[7]),
+                    ie: this.preserveOriginalValue(row[8]),
+                    endereco: this.preserveOriginalValue(row[9]),
+                    municipio_uf: this.preserveOriginalValue(row[10]),
+                    estado: this.preserveOriginalValue(row[11]),
+                    uf: this.preserveOriginalValue(row[12]),
+                    observacoes_cadastro: this.preserveOriginalValue(row[13]),
+                    setor: this.preserveOriginalValue(row[14]),
+                    segmento: this.preserveOriginalValue(row[15]),
+                    atividade_especialidade: this.preserveOriginalValue(row[16]),
+                    faturamento_anual: this.preserveOriginalValue(row[17]),
+                    porte: this.preserveOriginalValue(row[18]),
+                    regime_tributario_proposta: this.preserveOriginalValue(row[19]),
+                    regime_tributario_atual: this.preserveOriginalValue(row[20]),
+                    deadline_periodicidade: this.preserveOriginalValue(row[21]),
+                    deadline_dia: this.preserveOriginalValue(row[22]),
+                    deadline_util_corrente: this.preserveOriginalValue(row[23]),
+                    centro_custo_possui: this.preserveOriginalValue(row[24]),
+                    centro_custo_quantidade: this.preserveOriginalValue(row[25]),
+                    departamentalizacao_possui: this.preserveOriginalValue(row[26]),
+                    departamentalizacao_quantidade: this.preserveOriginalValue(row[27]),
+                    scp_quantidade: this.preserveOriginalValue(row[28]),
+                    importacao_processos_ano: this.preserveOriginalValue(row[29]),
+                    exportacao_processos_ano: this.preserveOriginalValue(row[30]),
+                    nf_entradas: this.preserveOriginalValue(row[31]),
+                    nf_saidas: this.preserveOriginalValue(row[32]),
+                    ctes_entrada: this.preserveOriginalValue(row[33]),
+                    ctes_saida: this.preserveOriginalValue(row[34]),
+                    cupom_fiscal: this.preserveOriginalValue(row[35]),
+                    nf_servicos_prestados: this.preserveOriginalValue(row[36]),
+                    servicos_tomados: this.preserveOriginalValue(row[37]),
+                    nf_pjs: this.preserveOriginalValue(row[38]),
+                    pro_labore: this.preserveOriginalValue(row[39]),
+                    estagiarios: this.preserveOriginalValue(row[40]),
+                    aprendizes: this.preserveOriginalValue(row[41]),
+                    rpa: this.preserveOriginalValue(row[42]),
+                    domesticas_clt: this.preserveOriginalValue(row[43]),
+                    colab_clt: this.preserveOriginalValue(row[44]),
+                    total_colaboradores: this.preserveOriginalValue(row[45]),
+                    data_adiantamento: this.parseDate(row[46]),
+                    data_pagamento: this.parseDate(row[47]),
+                    sistema_contabil: this.preserveOriginalValue(row[48]),
+                    sistema_fiscal: this.preserveOriginalValue(row[49]),
+                    sistema_folha: this.preserveOriginalValue(row[50]),
+                    sistema_financeiro: this.preserveOriginalValue(row[51]),
+                    sistema_rh: this.preserveOriginalValue(row[52]),
+                    sistema_outros: this.preserveOriginalValue(row[53]),
+                    empresa_aberta_go: this.preserveOriginalValue(row[54]),
+                    contato_principal_nome: this.preserveOriginalValue(row[55]),
+                    contato_principal_cargo: this.preserveOriginalValue(row[56]),
+                    contato_principal_email: this.preserveOriginalValue(row[57]),
+                    contato_principal_celular: this.preserveOriginalValue(row[58]),
+                    plano_contratado: this.preserveOriginalValue(row[59]),
+                    sla: this.preserveOriginalValue(row[60]),
+                    bpo_contabil: this.preserveOriginalValue(row[61]),
+                    bpo_fiscal: this.preserveOriginalValue(row[62]),
+                    bpo_folha: this.preserveOriginalValue(row[63]),
+                    bpo_financeiro: this.preserveOriginalValue(row[64]),
+                    bpo_rh: this.preserveOriginalValue(row[65]),
+                    bpo_cnd: this.preserveOriginalValue(row[66]),
+                    vl_bpo_contabil: this.preserveOriginalValue(row[67]),
+                    vl_bpo_fiscal: this.preserveOriginalValue(row[68]),
+                    vl_bpo_folha: this.preserveOriginalValue(row[69]),
+                    vl_bpo_financeiro: this.preserveOriginalValue(row[70]),
+                    vl_bpo_rh: this.preserveOriginalValue(row[71]),
+                    vl_bpo_legal: this.preserveOriginalValue(row[72]),
+                    honorario_mensal_total: this.preserveOriginalValue(row[73]),
+                    competencia_inicial_fixo: this.parseDate(row[74]),
+                    diversos_inicial: this.preserveOriginalValue(row[75]),
+                    competencia_diversos_inicial: this.parseDate(row[76]),
+                    vl_diversos_inicial: this.preserveOriginalValue(row[77]),
+                    implantacao: this.preserveOriginalValue(row[78]),
+                    forma_pgto: this.preserveOriginalValue(row[79]),
+                    vl_implantacao: this.preserveOriginalValue(row[80]),
+                    bpo_contabil_faturado: this.preserveOriginalValue(row[81]),
+                    bpo_fiscal_faturado: this.preserveOriginalValue(row[82]),
+                    bpo_folha_faturado: this.preserveOriginalValue(row[83]),
+                    bpo_financeiro_faturado: this.preserveOriginalValue(row[84]),
+                    bpo_rh_faturado: this.preserveOriginalValue(row[85]),
+                    bpo_legal_faturado: this.preserveOriginalValue(row[86]),
+                    diversos_in_faturado: this.preserveOriginalValue(row[87]),
+                    implantacao_faturado: this.preserveOriginalValue(row[88]),
+                    closer: this.preserveOriginalValue(row[89]),
+                    prospector: this.preserveOriginalValue(row[90]),
+                    origem_lead: this.preserveOriginalValue(row[91]),
+                    motivo_troca: this.preserveOriginalValue(row[92])
+                };
+
+                companies.push(companyData);
+            }
+
+            logger.info('✅ Dados completos parseados com sucesso', {
+                totalCompanies: companies.length,
+                headerRow: headerRowIndex + 1,
+                dataStartRow: headerRowIndex + 2
+            });
+
+            return companies;
+        } catch (error) {
+            logger.error('❌ Erro ao parsear dados completos', error);
+            throw error;
+        }
+    }
+
+    // Métodos auxiliares para conversão de dados
+    preserveOriginalValue(value) {
+        if (value === null || value === undefined) {
+            return null;
+        }
+        
+        // Se é uma string vazia, retornar string vazia
+        if (value === '') {
+            return '';
+        }
+        
+        // Para qualquer outro valor, converter para string preservando o formato original
+        try {
+            const stringValue = String(value);
+            // Remover apenas espaços no início e fim, preservando formatação interna
+            return stringValue.trim();
+        } catch (error) {
+            return String(value);
+        }
+    }
+
+    parseDate(value) {
+        if (!value) return null;
+        
+        try {
+            // Se já é uma data válida
+            if (value instanceof Date) {
+                return value.toISOString().split('T')[0];
+            }
+            
+            // Se é string, tentar converter
+            const str = String(value).trim();
+            if (!str) return null;
+            
+            // Verificar se é um número serial do Excel
+            if (!isNaN(str) && !str.includes('/') && !str.includes('-')) {
+                const excelDate = new Date((parseFloat(str) - 25569) * 86400 * 1000);
+                if (!isNaN(excelDate.getTime())) {
+                    return excelDate.toISOString().split('T')[0];
+                }
+            }
+            
+            // Tentar converter diretamente
+            const date = new Date(str);
+            if (!isNaN(date.getTime())) {
+                return date.toISOString().split('T')[0];
+            }
+            
+            // Se não conseguir converter, retornar o valor original
+            return str;
+        } catch (error) {
+            // Em caso de erro, retornar o valor original como string
+            return String(value).trim() || null;
+        }
+    }
+
+    parseNumber(value) {
+        if (!value) return null;
+        
+        try {
+            // Se é uma string, retornar como está (preservando formato original)
+            if (typeof value === 'string') {
+                const trimmed = value.trim();
+                return trimmed || null;
+            }
+            
+            // Se é um número, converter para string mantendo formato
+            if (typeof value === 'number') {
+                return value.toString();
+            }
+            
+            // Para outros tipos, converter para string
+            return String(value).trim() || null;
+        } catch (error) {
+            return String(value) || null;
+        }
+    }
+
+    parseInteger(value) {
+        if (!value) return null;
+        
+        try {
+            // Se é uma string, retornar como está (preservando formato original)
+            if (typeof value === 'string') {
+                const trimmed = value.trim();
+                return trimmed || null;
+            }
+            
+            // Se é um número, converter para string mantendo formato
+            if (typeof value === 'number') {
+                return value.toString();
+            }
+            
+            // Para outros tipos, converter para string
+            return String(value).trim() || null;
+        } catch (error) {
+            return String(value) || null;
+        }
+    }
+
     debugSampleData(companies, sampleSize = 5) {
         logger.info('🔍 DEBUG - Amostra de dados:', {
             totalCompanies: companies.length,

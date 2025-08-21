@@ -7,6 +7,8 @@ const rateLimit = require('express-rate-limit');
 // Routes
 const authRoutes = require('./routes/auth.routes');
 const companyRoutes = require('./routes/company.routes');
+const groupSearchRoutes = require('./routes/group-search.routes');
+const xlsxGeneratorRoutes = require('./routes/xlsx-generator.routes');
 const healthRoutes = require('./routes/health.routes');
 const syncRoutes = require('./routes/sync.routes');
 
@@ -52,6 +54,8 @@ app.use('/health', healthRoutes);
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/companies', companyRoutes);
+app.use('/api/group-search', groupSearchRoutes);
+app.use('/api/xlsx-generator', xlsxGeneratorRoutes);
 app.use('/api/sync', syncRoutes);
 
 // Root endpoint
