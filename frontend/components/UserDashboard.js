@@ -1,7 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { Search, FileSpreadsheet, Loader2, AlertCircle, ChevronDown, X, FileCheck } from 'lucide-react';
 import { toast } from 'react-hot-toast';
+
 import axios from 'axios';
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001';
 
 export default function UserDashboard() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -48,7 +51,7 @@ export default function UserDashboard() {
       setLoading(true);
       const token = localStorage.getItem('fluxoclientecs_token');
       
-      const response = await axios.get('http://localhost:3001/api/group-search/groups', {
+  const response = await axios.get(`${API_BASE_URL}/api/group-search/groups`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -137,7 +140,7 @@ export default function UserDashboard() {
       const fileNames = spreadsheetFiles.planilhas.map(p => p.fileName);
 
       const response = await axios.post(
-        'http://localhost:3001/api/xlsx-generator/validate-and-send-dual',
+        `${API_BASE_URL}/api/xlsx-generator/validate-and-send-dual`,
         {
           fileNames: fileNames,
           grupo: spreadsheetFiles.grupo,
@@ -193,7 +196,7 @@ export default function UserDashboard() {
 
       // Sempre gerar planilhas duplas (entrada e cobrança)
       const generateResponse = await axios.post(
-        'http://localhost:3001/api/xlsx-generator/generate-dual',
+        `${API_BASE_URL}/api/xlsx-generator/generate-dual`,
         {
           grupo: groupName,
           tiposPlanilha: ['entrada', 'cobranca'], // Sempre gerar ambas
@@ -217,7 +220,7 @@ export default function UserDashboard() {
       // Fazer download de cada arquivo gerado
       for (const planilha of planilhas) {
         const downloadResponse = await axios.get(
-          `http://localhost:3001/api/xlsx-generator/download/${planilha.fileName}`,
+          `${API_BASE_URL}/api/xlsx-generator/download/${planilha.fileName}`,
           {
             headers: {
               'Authorization': `Bearer ${token}`

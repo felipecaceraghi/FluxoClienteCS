@@ -4,6 +4,8 @@ import { useAuth } from '../../context/AuthContext';
 import toast from 'react-hot-toast';
 import axios from 'axios';
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001';
+
 export default function Users() {
     const { user, loading } = useAuth();
     const router = useRouter();
@@ -57,9 +59,8 @@ export default function Users() {
         try {
             setLoadingUsers(true);
             const token = localStorage.getItem('fluxoclientecs_token');
-            const response = await axios.get('/api/users?includeInactive=true', {
-                headers: { Authorization: `Bearer ${token}` },
-                baseURL: 'http://localhost:3001'
+            const response = await axios.get(`${API_BASE_URL}/api/users?includeInactive=true`, {
+                headers: { Authorization: `Bearer ${token}` }
             });
 
             if (response.data.success) {
@@ -76,9 +77,8 @@ export default function Users() {
     const loadStats = async () => {
         try {
             const token = localStorage.getItem('fluxoclientecs_token');
-            const response = await axios.get('/api/users/stats', {
-                headers: { Authorization: `Bearer ${token}` },
-                baseURL: 'http://localhost:3001'
+            const response = await axios.get(`${API_BASE_URL}/api/users/stats`, {
+                headers: { Authorization: `Bearer ${token}` }
             });
 
             if (response.data.success) {
@@ -120,9 +120,8 @@ export default function Users() {
     const createUser = async () => {
         try {
             const token = localStorage.getItem('fluxoclientecs_token');
-            const response = await axios.post('/api/users', newUser, {
-                headers: { Authorization: `Bearer ${token}` },
-                baseURL: 'http://localhost:3001'
+            const response = await axios.post(`${API_BASE_URL}/api/users`, newUser, {
+                headers: { Authorization: `Bearer ${token}` }
             });
 
             if (response.data.success) {
@@ -147,9 +146,8 @@ export default function Users() {
     const updateUser = async () => {
         try {
             const token = localStorage.getItem('fluxoclientecs_token');
-            const response = await axios.put(`/api/users/${editingUser.id}`, editingUser, {
-                headers: { Authorization: `Bearer ${token}` },
-                baseURL: 'http://localhost:3001'
+            const response = await axios.put(`${API_BASE_URL}/api/users/${editingUser.id}`, editingUser, {
+                headers: { Authorization: `Bearer ${token}` }
             });
 
             if (response.data.success) {
@@ -169,9 +167,8 @@ export default function Users() {
             const token = localStorage.getItem('fluxoclientecs_token');
             const endpoint = currentStatus ? 'deactivate' : 'reactivate';
             
-            const response = await axios.patch(`/api/users/${userId}/${endpoint}`, {}, {
-                headers: { Authorization: `Bearer ${token}` },
-                baseURL: 'http://localhost:3001'
+            const response = await axios.patch(`${API_BASE_URL}/api/users/${userId}/${endpoint}`, {}, {
+                headers: { Authorization: `Bearer ${token}` }
             });
 
             if (response.data.success) {
@@ -192,9 +189,8 @@ export default function Users() {
 
         try {
             const token = localStorage.getItem('fluxoclientecs_token');
-            const response = await axios.delete(`/api/users/${userId}`, {
-                headers: { Authorization: `Bearer ${token}` },
-                baseURL: 'http://localhost:3001'
+            const response = await axios.delete(`${API_BASE_URL}/api/users/${userId}`, {
+                headers: { Authorization: `Bearer ${token}` }
             });
 
             if (response.data.success) {
