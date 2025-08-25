@@ -23,17 +23,30 @@ export default function AdminDashboard() {
     try {
       setLoadingStats(true);
       const token = localStorage.getItem('fluxoclientecs_token');
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001';
       
       // Buscar estatísticas reais
       const [empresasResponse, relatoriosResponse, syncResponse] = await Promise.all([
-        axios.get('http://localhost:3001/api/companies/count', {
-          headers: { Authorization: `Bearer ${token}` }
+        axios.get(`${API_BASE_URL}/api/companies/count`, {
+          headers: { 
+            Authorization: `Bearer ${token}`,
+            'bypass-tunnel-reminder': 'true',
+            'User-Agent': 'FluxoClienteCS/1.0'
+          }
         }),
-        axios.get('http://localhost:3001/api/xlsx-generator/stats', {
-          headers: { Authorization: `Bearer ${token}` }
+        axios.get(`${API_BASE_URL}/api/xlsx-generator/stats`, {
+          headers: { 
+            Authorization: `Bearer ${token}`,
+            'bypass-tunnel-reminder': 'true',
+            'User-Agent': 'FluxoClienteCS/1.0'
+          }
         }),
-        axios.get('http://localhost:3001/api/sync/stats', {
-          headers: { Authorization: `Bearer ${token}` }
+        axios.get(`${API_BASE_URL}/api/sync/stats`, {
+          headers: { 
+            Authorization: `Bearer ${token}`,
+            'bypass-tunnel-reminder': 'true',
+            'User-Agent': 'FluxoClienteCS/1.0'
+          }
         })
       ]);
 
@@ -68,9 +81,14 @@ export default function AdminDashboard() {
     try {
       setSyncing(true);
       const token = localStorage.getItem('fluxoclientecs_token');
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001';
       
-      await axios.post('http://localhost:3001/api/sync/manual', {}, {
-        headers: { Authorization: `Bearer ${token}` }
+      await axios.post(`${API_BASE_URL}/api/sync/manual`, {}, {
+        headers: { 
+          Authorization: `Bearer ${token}`,
+          'bypass-tunnel-reminder': 'true',
+          'User-Agent': 'FluxoClienteCS/1.0'
+        }
       });
       
       // Atualizar estatísticas após sincronização para mostrar nova data

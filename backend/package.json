@@ -6,6 +6,7 @@
   "scripts": {
     "init-db": "node src/database/init.js",
     "start": "node src/app.js",
+    "build": "echo 'Build completed'",
     "dev": "nodemon src/app.js",
     "test": "jest"
   },

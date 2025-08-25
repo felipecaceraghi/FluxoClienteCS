@@ -37,9 +37,25 @@ app.use(helmet({
     crossOriginEmbedderPolicy: false,
 }));
 app.use(cors({
-    origin: process.env.NODE_ENV === 'production' 
-        ? ['https://seudominio.com'] 
-        : ['http://localhost:3000', 'http://localhost:3001'],
+    origin: function (origin, callback) {
+        // Permitir requests sem origin (ex: mobile apps, Postman)
+        if (!origin) return callback(null, true);
+        
+        // Permitir localhost para desenvolvimento
+        if (origin.includes('localhost')) return callback(null, true);
+        
+        // Permitir Localtunnel
+        if (origin.includes('loca.lt')) return callback(null, true);
+        
+        // Permitir Vercel
+        if (origin.includes('vercel.app')) return callback(null, true);
+        
+        // Permitir domínios personalizados em produção
+        const allowedDomains = process.env.ALLOWED_ORIGINS?.split(',') || [];
+        if (allowedDomains.includes(origin)) return callback(null, true);
+        
+        callback(new Error('Não permitido pelo CORS'));
+    },
     credentials: true
 }));
 

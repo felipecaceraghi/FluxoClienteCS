@@ -19,6 +19,11 @@ class AuthService {
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
         }
+        
+        // Headers para bypass do Localtunnel
+        config.headers['bypass-tunnel-reminder'] = 'true';
+        config.headers['User-Agent'] = 'FluxoClienteCS/1.0';
+        
         return config;
       },
       (error) => {
