@@ -59,9 +59,13 @@ export default function Users() {
         try {
             setLoadingUsers(true);
             const token = localStorage.getItem('fluxoclientecs_token');
-            const response = await axios.get(`${API_BASE_URL}/api/users?includeInactive=true`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+                        const response = await axios.get(`${API_BASE_URL}/api/users?includeInactive=true`, {
+                                headers: {
+                                    Authorization: `Bearer ${token}`,
+                                    'bypass-tunnel-reminder': 'true',
+                                    'User-Agent': 'FluxoClienteCS/1.0'
+                                }
+                        });
 
             if (response.data.success) {
                 setUsers(response.data.data);
@@ -77,9 +81,13 @@ export default function Users() {
     const loadStats = async () => {
         try {
             const token = localStorage.getItem('fluxoclientecs_token');
-            const response = await axios.get(`${API_BASE_URL}/api/users/stats`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+                        const response = await axios.get(`${API_BASE_URL}/api/users/stats`, {
+                                headers: {
+                                    Authorization: `Bearer ${token}`,
+                                    'bypass-tunnel-reminder': 'true',
+                                    'User-Agent': 'FluxoClienteCS/1.0'
+                                }
+                        });
 
             if (response.data.success) {
                 setStats(response.data.data);
@@ -120,9 +128,13 @@ export default function Users() {
     const createUser = async () => {
         try {
             const token = localStorage.getItem('fluxoclientecs_token');
-            const response = await axios.post(`${API_BASE_URL}/api/users`, newUser, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+                        const response = await axios.post(`${API_BASE_URL}/api/users`, newUser, {
+                                headers: {
+                                    Authorization: `Bearer ${token}`,
+                                    'bypass-tunnel-reminder': 'true',
+                                    'User-Agent': 'FluxoClienteCS/1.0'
+                                }
+                        });
 
             if (response.data.success) {
                 toast.success('Usuário criado com sucesso!');
@@ -146,9 +158,13 @@ export default function Users() {
     const updateUser = async () => {
         try {
             const token = localStorage.getItem('fluxoclientecs_token');
-            const response = await axios.put(`${API_BASE_URL}/api/users/${editingUser.id}`, editingUser, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+                        const response = await axios.put(`${API_BASE_URL}/api/users/${editingUser.id}`, editingUser, {
+                                headers: {
+                                    Authorization: `Bearer ${token}`,
+                                    'bypass-tunnel-reminder': 'true',
+                                    'User-Agent': 'FluxoClienteCS/1.0'
+                                }
+                        });
 
             if (response.data.success) {
                 toast.success('Usuário atualizado com sucesso!');
@@ -167,9 +183,13 @@ export default function Users() {
             const token = localStorage.getItem('fluxoclientecs_token');
             const endpoint = currentStatus ? 'deactivate' : 'reactivate';
             
-            const response = await axios.patch(`${API_BASE_URL}/api/users/${userId}/${endpoint}`, {}, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+                        const response = await axios.patch(`${API_BASE_URL}/api/users/${userId}/${endpoint}`, {}, {
+                                headers: {
+                                    Authorization: `Bearer ${token}`,
+                                    'bypass-tunnel-reminder': 'true',
+                                    'User-Agent': 'FluxoClienteCS/1.0'
+                                }
+                        });
 
             if (response.data.success) {
                 toast.success(response.data.message);
@@ -189,9 +209,13 @@ export default function Users() {
 
         try {
             const token = localStorage.getItem('fluxoclientecs_token');
-            const response = await axios.delete(`${API_BASE_URL}/api/users/${userId}`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+                        const response = await axios.delete(`${API_BASE_URL}/api/users/${userId}`, {
+                                headers: {
+                                    Authorization: `Bearer ${token}`,
+                                    'bypass-tunnel-reminder': 'true',
+                                    'User-Agent': 'FluxoClienteCS/1.0'
+                                }
+                        });
 
             if (response.data.success) {
                 toast.success('Usuário excluído com sucesso!');

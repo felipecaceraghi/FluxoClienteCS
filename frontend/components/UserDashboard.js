@@ -51,9 +51,11 @@ export default function UserDashboard() {
       setLoading(true);
       const token = localStorage.getItem('fluxoclientecs_token');
       
-  const response = await axios.get(`${API_BASE_URL}/api/group-search/groups`, {
+      const response = await axios.get(`${API_BASE_URL}/api/group-search/groups`, {
         headers: {
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          'bypass-tunnel-reminder': 'true',
+          'User-Agent': 'FluxoClienteCS/1.0'
         }
       });
 
@@ -150,7 +152,9 @@ export default function UserDashboard() {
         {
           headers: {
             'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'bypass-tunnel-reminder': 'true',
+            'User-Agent': 'FluxoClienteCS/1.0'
           }
         }
       );
@@ -206,7 +210,9 @@ export default function UserDashboard() {
         {
           headers: {
             'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'bypass-tunnel-reminder': 'true',
+            'User-Agent': 'FluxoClienteCS/1.0'
           }
         }
       );
@@ -223,7 +229,9 @@ export default function UserDashboard() {
           `${API_BASE_URL}/api/xlsx-generator/download/${planilha.fileName}`,
           {
             headers: {
-              'Authorization': `Bearer ${token}`
+              'Authorization': `Bearer ${token}`,
+              'bypass-tunnel-reminder': 'true',
+              'User-Agent': 'FluxoClienteCS/1.0'
             },
             responseType: 'blob'
           }
