@@ -1,23 +1,166 @@
 const express = require('express');
 const xlsxGeneratorController = require('../controllers/xlsx-generator.controller');
 const authMiddleware = require('../middleware/auth');
+const { validateGenerateDualSpreadsheet, validateAndSendDual } = require('../middleware/validation');
 
 const router = express.Router();
 
-// Aplicar middleware de autenticação em todas as rotas
+// Visualizar arquivo como HTML (sem autenticação para iframe)
+// GET /api/xlsx-generator/html/:fileName
+router.get('/html/:fileName', (req, res) => {
+    const { fileName } = req.params;
+    const XLSX = require('xlsx');
+    const path = require('path');
+    const fs = require('fs');
+
+    try {
+        // Validar nome do arquivo
+        if (!fileName || !fileName.endsWith('.xlsx')) {
+            return res.status(400).send('<h1>Erro: Nome de arquivo inválido</h1>');
+        }
+
+        // Caminho do arquivo
+        const filePath = path.join(__dirname, '../storage/generated-reports', fileName);
+        
+        // Verificar se arquivo existe
+        if (!fs.existsSync(filePath)) {
+            return res.status(404).send('<h1>Erro: Arquivo não encontrado</h1>');
+        }
+
+        // Ler arquivo Excel
+        const workbook = XLSX.readFile(filePath);
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        
+        // Converter para HTML
+        const htmlTable = XLSX.utils.sheet_to_html(worksheet, {
+            id: 'excel-table',
+            editable: false
+        });
+
+        // Criar página HTML completa
+        const html = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>${fileName}</title>
+                <meta charset="utf-8">
+                <style>
+                    body {
+                        margin: 0;
+                        padding: 20px;
+                        font-family: 'Segoe UI', Arial, sans-serif;
+                        background: #f5f5f5;
+                    }
+                    .header {
+                        background: white;
+                        padding: 15px 20px;
+                        margin-bottom: 20px;
+                        border-radius: 8px;
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                    }
+                    .excel-container {
+                        background: white;
+                        border-radius: 8px;
+                        overflow: hidden;
+                        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                    }
+                    #excel-table {
+                        width: 100%;
+                        border-collapse: collapse;
+                        font-size: 13px;
+                    }
+                    #excel-table th, #excel-table td {
+                        border: 1px solid #d1d5db;
+                        padding: 8px 12px;
+                        text-align: left;
+                    }
+                    #excel-table th {
+                        background: #f8f9fa;
+                        font-weight: 600;
+                    }
+                    #excel-table tr:nth-child(even) {
+                        background: #f9fafb;
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <h2 style="margin: 0;">📊 ${fileName}</h2>
+                </div>
+                <div class="excel-container">
+                    ${htmlTable}
+                </div>
+            </body>
+            </html>
+        `;
+
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        return res.send(html);
+
+    } catch (error) {
+        console.error('Erro ao renderizar Excel:', error);
+        return res.status(500).send(`
+            <html>
+                <body>
+                    <h1>❌ Erro ao carregar planilha</h1>
+                    <p>${error.message}</p>
+                </body>
+            </html>
+        `);
+    }
+});
+
+// Validar e enviar planilha (SEM AUTENTICAÇÃO PARA TESTE)
+// POST /api/xlsx-generator/validate-and-send
+router.post('/validate-and-send', xlsxGeneratorController.validateAndSend);
+
+// Validar e enviar planilhas duplas (SEM AUTENTICAÇÃO PARA TESTE)
+// POST /api/xlsx-generator/validate-and-send-dual
+router.post('/validate-and-send-dual', validateAndSendDual, xlsxGeneratorController.validateAndSendDual);
+
+// Aplicar middleware de autenticação em todas as outras rotas
 router.use(authMiddleware);
+
+// Estatísticas de relatórios
+// GET /api/xlsx-generator/stats
+router.get('/stats', xlsxGeneratorController.getStats);
+
+// Testar APENAS conversão Python
+// POST /api/xlsx-generator/test-python
+router.post('/test-python', xlsxGeneratorController.testPythonOnly);
+
+// Testar conversão para imagem e salvar arquivo
+// POST /api/xlsx-generator/test-image-file
+router.post('/test-image-file', xlsxGeneratorController.testImageFile);
+
+// Testar envio de email
+// POST /api/xlsx-generator/test-email
+router.post('/test-email', xlsxGeneratorController.testEmail);
+
+// Testar conversão de imagem
+// POST /api/xlsx-generator/test-image
+router.post('/test-image', xlsxGeneratorController.testImageConversion);
 
 // Gerar planilha XLSX para um grupo específico
 // GET /api/xlsx-generator/generate/:grupo
 router.get('/generate/:grupo', xlsxGeneratorController.generateForGroup);
 
-// Gerar planilha XLSX com dados customizados
-// POST /api/xlsx-generator/custom
-router.post('/custom', xlsxGeneratorController.generateCustom);
+// Gerar planilhas duplas (entrada e cobrança)
+// POST /api/xlsx-generator/generate-dual
+router.post('/generate-dual', validateGenerateDualSpreadsheet, xlsxGeneratorController.generateDualSpreadsheets);
+
+// Visualizar arquivo gerado (sem download)
+// GET /api/xlsx-generator/view/:fileName
+router.get('/view/:fileName', xlsxGeneratorController.viewFile);
 
 // Download de arquivo gerado
 // GET /api/xlsx-generator/download/:fileName
 router.get('/download/:fileName', xlsxGeneratorController.downloadFile);
+
+// Gerar planilha XLSX com dados customizados
+// POST /api/xlsx-generator/custom
+router.post('/custom', xlsxGeneratorController.generateCustom);
 
 // Listar arquivos disponíveis para download
 // GET /api/xlsx-generator/files

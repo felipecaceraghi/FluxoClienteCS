@@ -69,6 +69,19 @@ class CompanyController {
         }
     }
 
+    async getCount(req, res, next) {
+        try {
+            const result = await companyService.getCompaniesCount();
+
+            res.json({
+                success: true,
+                count: result.count
+            });
+        } catch (error) {
+            next(error);
+        }
+    }
+
     async getStats(req, res, next) {
         try {
             const result = await companyService.getCompaniesStats();

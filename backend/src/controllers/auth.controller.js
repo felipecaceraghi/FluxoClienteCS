@@ -106,7 +106,13 @@ class AuthController {
             res.json({
                 success: true,
                 data: {
-                    user
+                    user: {
+                        id: user.id,
+                        email: user.email,
+                        name: user.name,
+                        role: user.role,
+                        active: user.active
+                    }
                 }
             });
         } catch (error) {

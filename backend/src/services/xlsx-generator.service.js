@@ -2,6 +2,7 @@ const ExcelJS = require('exceljs');
 const fs = require('fs');
 const path = require('path');
 const logger = require('../utils/logger');
+const CurrencyUtils = require('../utils/currency');
 const axios = require('axios');
 
 class XlsxGeneratorService {
@@ -10,6 +11,14 @@ class XlsxGeneratorService {
         this.ensureOutputDir();
         
         this.workbook = new ExcelJS.Workbook();
+        
+        // Configurar encoding explicitamente para UTF-8
+        this.workbook.creator = 'FluxoClienteCS';
+        this.workbook.lastModifiedBy = 'FluxoClienteCS';
+        this.workbook.created = new Date();
+        this.workbook.modified = new Date();
+        this.workbook.calcProperties.fullCalcOnLoad = true;
+        
         this.worksheet = null;
         this.currentRow = 1;
         this.dataRows = []; // Array para armazenar todas as linhas antes da escrita
@@ -25,7 +34,7 @@ class XlsxGeneratorService {
             'Folha de Pagamento', 'Funcionários CLT:', 'Pró-Labore:', 'Estagiários:',
             'Aprendizes:', 'Autônomos - RPA:', 'Domésticas CLT:', 'Sistemas',
             'Contábil e Fiscal:', 'Contabilidade e Fiscal', 'Deadline:', 'CNAE:',
-            'Comercial', 'Closer:', 'Prospector:', 'Obs:'
+            'Comercial', 'Closer:', 'Prospector:', 'Obs Closer:', 'Obs:'
         ];
 
         // Definir estilos
@@ -111,6 +120,39 @@ class XlsxGeneratorService {
         return truncated;
     }
 
+    // Função para truncar nome da empresa para o cabeçalho (25 chars)
+    truncateCompanyNameHeader(name) {
+        if (!name) return '';
+        const nameStr = String(name).trim();
+        const maxLength = 25;
+        if (nameStr.length <= maxLength) {
+            return nameStr;
+        }
+        const truncated = nameStr.substring(0, maxLength - 3) + '...';
+        logger.info(`✂️ Nome truncado para header: "${nameStr}" → "${truncated}" (${nameStr.length} → ${truncated.length} chars)`);
+        return truncated;
+    }
+
+    // Normaliza diferentes formatos/versões de payloads de empresa para o shape esperado
+    normalizeCompany(raw) {
+        if (!raw) return raw;
+
+        // Mantemos todas as chaves originais e garantimos aliases para os campos críticos
+        const c = { ...raw };
+
+        // Campos comuns/aliases
+        c.nome_fantasia = raw.nome_fantasia || raw.nome || raw.name || raw.company || '';
+        c.razao_social = raw.razao_social || raw.razao || raw.company_name || raw.razaoSocial || '';
+        c.codigo = raw.codigo || raw.id || raw.code || raw.codigo_empresa || '';
+        c.grupo = raw.grupo || raw.group || raw.groupName || raw.grupo_nome || '';
+        c.inicio_contrato = raw.inicio_contrato || raw.data_inicio || raw.start_date || raw.inicio || raw.inicioContrato || null;
+        c.cnpj = raw.cnpj || raw.cpf || raw.documento || '';
+        c.faturamento_anual = raw.faturamento_anual || raw.faturamento || raw.revenue || '';
+
+        // Keep originals for any other property; return normalized object
+        return c;
+    }
+
     // Função para buscar dados da API
     async fetchGroupData(groupName) {
         try {
@@ -179,8 +221,24 @@ class XlsxGeneratorService {
         const paddedData = [...data];
         while (paddedData.length < 9) paddedData.push(''); // Apenas até coluna I (9 colunas)
         
+        // Garantir que strings sejam tratadas como UTF-8 e corrigir caracteres específicos
+        const normalizedData = paddedData.map(item => {
+            if (typeof item === 'string') {
+                let text = item;
+                
+                // CORREÇÃO DIRETA ANTES DA NORMALIZAÇÃO
+                text = text.replace(/Certidço/g, 'Certidao Negativa');
+                text = text.replace(/Certidðão/g, 'Certidao Negativa');
+                text = text.replace(/Certidçao/g, 'Certidao Negativa');
+                
+                // Normalizar string para UTF-8
+                return text.normalize('NFD').normalize('NFC');
+            }
+            return item;
+        });
+        
         this.dataRows.push({
-            data: paddedData,
+            data: normalizedData,
             styleType: styleType,
             rowNumber: this.currentRow
         });
@@ -202,6 +260,18 @@ class XlsxGeneratorService {
             const row = this.worksheet.addRow(rowData.data);
             
             row.eachCell((cell, colNumber) => {
+                // Garantir que o valor da célula seja UTF-8 correto
+                if (typeof cell.value === 'string') {
+                    let cellText = cell.value;
+                    
+                    // CORREÇÃO DIRETA ANTES DA NORMALIZAÇÃO
+                    cellText = cellText.replace(/Certidço/g, 'Certidao Negativa');
+                    cellText = cellText.replace(/Certidðão/g, 'Certidao Negativa');
+                    cellText = cellText.replace(/Certidçao/g, 'Certidao Negativa');
+                    
+                    cell.value = cellText.normalize('NFD').normalize('NFC');
+                }
+                
                 cell.font = this.styles[rowData.styleType].font;
                 cell.alignment = this.styles[rowData.styleType].alignment;
                 if (this.styles[rowData.styleType].fill) {
@@ -213,7 +283,7 @@ class XlsxGeneratorService {
             if (rowData.data[2]) {
                 const cellValue = String(rowData.data[2]).trim();
                 isSectionHeader = ['Serviços Contratados', 'Contato Principal', 'Entendimento do Negócio', 
-                                 'Folha de Pagamento', 'Sistemas', 'Contabilidade e Fiscal', 'Comercial'].includes(cellValue);
+                                 'Folha de Pagamento', 'Sistemas', 'Contabilidade e Fiscal', 'Honorários e Cobrança', 'Comercial'].includes(cellValue);
             }
 
             if (rowData.data[2]) {
@@ -249,9 +319,39 @@ class XlsxGeneratorService {
                 // Itera sobre as colunas D, E, F (índices 3, 4, 5)
                 for (let colIndex = 3; colIndex <= 5; colIndex++) {
                     const cell = row.getCell(colIndex + 1);
+                    
+                    // Sempre aplicar alinhamento vertical central para valores monetários
+                    cell.alignment = { vertical: 'middle', horizontal: 'left' };
+                    
                     // Aplica o formato apenas se o valor for um número
                     if (typeof cell.value === 'number') {
-                        cell.numFmt = '"R$" #,##0.00';
+                        cell.numFmt = CurrencyUtils.getExcelCurrencyFormat();
+                    }
+                }
+            }
+
+            // ================== FORMATAÇÃO DE HONORÁRIOS ==================
+            // Verifica se é uma linha da seção "Honorários e Cobrança"
+            const honorariosLabels = [
+                'BPO Contábil:', 'BPO Fiscal:', 'BPO Folha:', 'BPO Financeiro:', 
+                'BPO RH:', 'BPO Legal:', 'Total Mensal:'
+            ];
+            
+            if (rowData.data[2] && honorariosLabels.includes(String(rowData.data[2]).trim())) {
+                // Aplicar negrito no nome do serviço (coluna C)
+                const cellC = row.getCell(3);
+                cellC.font = this.styles.bold.font;
+                
+                // Itera sobre as colunas D, E, F (índices 3, 4, 5)
+                for (let colIndex = 3; colIndex <= 5; colIndex++) {
+                    const cell = row.getCell(colIndex + 1);
+                    
+                    // Sempre aplicar alinhamento vertical central para valores monetários
+                    cell.alignment = { vertical: 'middle', horizontal: 'left' };
+                    
+                    // Aplica o formato apenas se o valor for um número
+                    if (typeof cell.value === 'number' && cell.value > 0) {
+                        cell.numFmt = CurrencyUtils.getExcelCurrencyFormat();
                     }
                 }
             }
@@ -283,6 +383,19 @@ class XlsxGeneratorService {
                             color: { argb: 'FF000000' },
                             underline: true
                         };
+                    }
+                }
+            }
+            
+            // ================== FORMATAÇÃO FINAL PARA HONORÁRIOS ==================
+            // Verificação específica para garantir que "Honorários e Cobrança" tenha formatação correta
+            if (rowData.data[2] && String(rowData.data[2]).trim() === 'Honorários e Cobrança') {
+                // Aplicar formatação de section header em TODAS as colunas da linha
+                for (let colNum = 3; colNum <= 9; colNum++) {
+                    const cell = row.getCell(colNum);
+                    if (cell.value) { // Só formatar se tiver conteúdo
+                        cell.font = this.styles.sectionHeader.font;
+                        cell.fill = this.styles.sectionHeader.fill;
                     }
                 }
             }
@@ -413,21 +526,21 @@ class XlsxGeneratorService {
 
             const siteRow = ['', '', 'Site:'];
             chunk.forEach(company => {
-                siteRow.push('https://teklamatik.com.br/');
+                siteRow.push(company.link_do_site || '');
             });
             while (siteRow.length < 9) siteRow.push('');
             this.addDataRow(siteRow);
 
             const planoRow = ['', '', 'Plano Contratado:'];
             chunk.forEach(company => {
-                planoRow.push(company.plano_contratado || 'Advanced');
+                planoRow.push(company.plano_contratado || '');
             });
             while (planoRow.length < 9) planoRow.push('');
             this.addDataRow(planoRow);
 
             const slaRow = ['', '', 'SLA Para Retorno:'];
             chunk.forEach(company => {
-                slaRow.push(company.sla || '48 horas úteis');
+                slaRow.push(company.sla || '');
             });
             while (slaRow.length < 9) slaRow.push('');
             this.addDataRow(slaRow);
@@ -554,7 +667,7 @@ class XlsxGeneratorService {
             // ======================================================================
 
             const fields = [
-                { label: 'Regime Tributário:', field: 'regime_tributario_atual', default: 'Lucro Presumido' },
+                { label: 'Regime Tributário:', field: 'regime_tributario_atual', default: '' },
                 { label: 'NF de Entrada:', field: 'nf_entradas', default: 0, isNumeric: true },
                 { label: 'NF de Saída:', field: 'nf_saidas', default: 0, isNumeric: true },
                 { label: 'CT-es de Entrada:', field: 'ctes_entrada', default: 0, isNumeric: true },
@@ -624,7 +737,7 @@ class XlsxGeneratorService {
         
         this.addEmptyDataRow();
         this.addDataRow(['', '', 'Sistemas', '', '', '', '', '', '']);
-        this.addDataRow(['', '', 'Contábil e Fiscal:', firstCompany.sistema_contabil || 'WK Radar', '', '', '', '', '']);
+        this.addDataRow(['', '', 'Contábil e Fiscal:', firstCompany.sistema_contabil || '', '', '', '', '', '']);
         this.addEmptyDataRow();
     }
 
@@ -644,9 +757,9 @@ class XlsxGeneratorService {
                 // Monta deadline dinâmico baseado nos campos da API
                 let deadline = '';
                 if (company.deadline_periodicidade) {
-                    deadline = `${company.deadline_util_corrente || 'Corrente'}, dia ${company.deadline_periodicidade}`;
+                    deadline = `${company.deadline_util_corrente || ''}, dia ${company.deadline_periodicidade}`;
                 } else {
-                    deadline = 'Trimestral, dia 30'; // Fallback
+                    deadline = ''; // Sem fallback
                 }
                 deadlineRow.push(deadline);
             });
@@ -655,7 +768,7 @@ class XlsxGeneratorService {
 
             const cnaeRow = ['', '', 'CNAE:'];
             chunk.forEach(company => {
-                cnaeRow.push(company.atividade_especialidade || 'Não informado');
+                cnaeRow.push(company.atividade_especialidade || '');
             });
             while (cnaeRow.length < 9) cnaeRow.push('');
             this.addDataRow(cnaeRow);
@@ -665,47 +778,146 @@ class XlsxGeneratorService {
     }
 
     addCommercialInfo(companies) {
-        const firstCompany = companies[0];
-        
-        // Empresas abertas pela Go Further - agora vem da API
-        this.addDataRow(['', '', 'Empresas abertas pela Go Further?', '', firstCompany.empresa_aberta_go || 'Não', '', '', '', '']);
-        this.addEmptyDataRow();
-        
-        // Cobrança de Implantação - agora vem da API
-        this.addDataRow(['', '', 'Haverá Cobrança de Implantação:', '', firstCompany.implantacao || 'Não', '', '', '', '']);
-        this.addDataRow(['', '', 'Vencimento:', '', 'Vencimento de forma conjunta ao primeiro honorário mensal', '', '', '', '']);
-        this.addEmptyDataRow();
-        
-        this.addDataRow(['', '', 'Faturar por:', '', '', '', '', '', '']);
-        
-        // Faturar por - agora vem da API
-        if (companies.some(c => c.bpo_contabil === 'Sim')) {
-            const faturadoContabil = firstCompany.bpo_contabil_faturado || 'GF Accounting';
-            this.addDataRow(['', '', 'Contábil', '', faturadoContabil, '', '', '', '']);
-            logger.info(`📋 Contábil faturado por: ${faturadoContabil}`);
+    const firstCompany = companies[0];
+    
+    // Empresas abertas pela Go Further - agora vem da API
+    this.addDataRow(['', '', 'Empresas abertas pela Go Further?', '', firstCompany.empresa_aberta_go || '', '', '', '', '']);
+    this.addEmptyDataRow();
+    
+    // Cobrança de Implantação - agora vem da API
+    this.addDataRow(['', '', 'Haverá Cobrança de Implantação:', '', firstCompany.implantacao || '', '', '', '', '']);
+    this.addDataRow(['', '', 'Vencimento:', '', firstCompany.vencimento_implantacao || '', '', '', '', '']);
+    this.addEmptyDataRow();
+    
+    this.addDataRow(['', '', 'Faturar por:', '', '', '', '', '', '']);
+    
+    // Mapeamento completo de todos os 6 serviços BPO
+    const servicosFaturamento = [
+        { 
+            campo: 'bpo_contabil', 
+            nome: 'Contábil', 
+            faturadoPor: 'bpo_contabil_faturado',
+            default: ''
+        },
+        { 
+            campo: 'bpo_fiscal', 
+            nome: 'Fiscal', 
+            faturadoPor: 'bpo_fiscal_faturado',
+            default: ''
+        },
+        { 
+            campo: 'bpo_folha', 
+            nome: 'Folha', 
+            faturadoPor: 'bpo_folha_faturado',
+            default: ''
+        },
+        { 
+            campo: 'bpo_financeiro', 
+            nome: 'Financeiro', 
+            faturadoPor: 'bpo_financeiro_faturado',
+            default: ''
+        },
+        { 
+            campo: 'bpo_rh', 
+            nome: 'RH', 
+            faturadoPor: 'bpo_rh_faturado',
+            default: ''
+        },
+        { 
+            campo: 'bpo_cnd', 
+            nome: 'BPO Legal', 
+            faturadoPor: 'bpo_legal_faturado', // Mapeia bpo_cnd para bpo_legal_faturado
+            default: ''
         }
-        
-        if (companies.some(c => c.bpo_fiscal === 'Sim')) {
-            const faturadoFiscal = firstCompany.bpo_fiscal_faturado || 'E.Reeve';
-            this.addDataRow(['', '', 'Fiscal', '', faturadoFiscal, '', '', '', '']);
-            logger.info(`📋 Fiscal faturado por: ${faturadoFiscal}`);
+    ];
+
+    // Processa cada serviço se estiver contratado
+    servicosFaturamento.forEach(servico => {
+        // Verifica se alguma empresa tem o serviço contratado
+        if (companies.some(c => c[servico.campo] === 'Sim')) {
+            // Pega o valor do campo faturado da API ou usa o default
+            let faturadoPor = firstCompany[servico.faturadoPor];
+            
+            // Se o campo estiver vazio ou for null/undefined, usa o default (agora vazio)
+            if (!faturadoPor || faturadoPor.trim() === '') {
+                faturadoPor = servico.default;
+                logger.info(`⚠️  Campo ${servico.faturadoPor} vazio, usando default: vazio`);
+            } else {
+                logger.info(`✅ Campo ${servico.faturadoPor} da API: ${faturadoPor}`);
+            }
+            
+            this.addDataRow(['', '', servico.nome, '', faturadoPor, '', '', '', '']);
+            logger.info(`📋 ${servico.nome} faturado por: ${faturadoPor}`);
         }
+    });
+    
+    this.addEmptyDataRow();
+    
+    this.addDataRow(['', '', 'Comercial', '', '', '', '', '', '']);
+    this.addDataRow(['', '', 'Closer:', firstCompany.closer || '', '', '', '', '', '']);
+    this.addDataRow(['', '', 'Prospector:', firstCompany.prospector || '', '', '', '', '', '']);
+    
+    if (firstCompany.observacao_closer) {
+        this.addDataRow(['', '', 'Obs Closer:', firstCompany.observacao_closer, '', '', '', '', '']);
+    }
+    
+    if (firstCompany.observacoes_cadastro) {
+        this.addDataRow(['', '', 'Obs:', firstCompany.observacoes_cadastro, '', '', '', '', '']);
+    }
+}
+
+    // Nova seção: Honorários e Cobrança
+    addHonorarios(companies) {
+        const chunks = this.chunkArray(companies, 3);
         
-        if (companies.some(c => c.bpo_cnd === 'Sim')) {
-            const faturadoCnd = firstCompany.bpo_legal_faturado || 'E.Reeve';
-            this.addDataRow(['', '', 'Certidão Negativa', '', faturadoCnd, '', '', '', '']);
-            logger.info(`📋 Certidão Negativa faturada por: ${faturadoCnd}`);
-        }
-        
-        this.addEmptyDataRow();
-        
-        this.addDataRow(['', '', 'Comercial', '', '', '', '', '', '']);
-        this.addDataRow(['', '', 'Closer:', firstCompany.closer || '', '', '', '', '', '']);
-        this.addDataRow(['', '', 'Prospector:', firstCompany.prospector || '', '', '', '', '', '']);
-        
-        if (firstCompany.observacoes_cadastro) {
-            this.addDataRow(['', '', 'Obs:', firstCompany.observacoes_cadastro, '', '', '', '', '']);
-        }
+        chunks.forEach(chunk => {
+            const headerRow = ['', '', 'Honorários e Cobrança'];
+            chunk.forEach(company => {
+                headerRow.push(this.truncateCompanyName(company.nome_fantasia));
+            });
+            while (headerRow.length < 9) headerRow.push('');
+            this.addDataRow(headerRow);
+
+            // Mapeamento de serviços com valores
+            const servicosHonorarios = [
+                { campo: 'bpo_contabil', nome: 'BPO Contábil', valorCampo: 'vl_bpo_contabil' },
+                { campo: 'bpo_fiscal', nome: 'BPO Fiscal', valorCampo: 'vl_bpo_fiscal' },
+                { campo: 'bpo_folha', nome: 'BPO Folha', valorCampo: 'vl_bpo_folha' },
+                { campo: 'bpo_financeiro', nome: 'BPO Financeiro', valorCampo: 'vl_bpo_financeiro' },
+                { campo: 'bpo_rh', nome: 'BPO RH', valorCampo: 'vl_bpo_rh' },
+                { campo: 'bpo_cnd', nome: 'BPO Legal', valorCampo: 'vl_bpo_legal' }
+            ];
+
+            servicosHonorarios.forEach(servico => {
+                // Verificar se alguma empresa do chunk tem o serviço contratado
+                const temServicoContratado = chunk.some(c => c[servico.campo] === 'Sim');
+                
+                if (temServicoContratado) {
+                    const servicoRow = ['', '', servico.nome + ':'];
+                    chunk.forEach(company => {
+                        if (company[servico.campo] === 'Sim') {
+                            const valor = CurrencyUtils.processForSpreadsheet(company[servico.valorCampo]);
+                            servicoRow.push(valor);
+                        } else {
+                            servicoRow.push('R$ 0,00');
+                        }
+                    });
+                    while (servicoRow.length < 9) servicoRow.push('');
+                    this.addDataRow(servicoRow);
+                }
+            });
+
+            // Total mensal
+            const totalRow = ['', '', 'Total Mensal:'];
+            chunk.forEach(company => {
+                const total = CurrencyUtils.processForSpreadsheet(company.honorario_mensal_total);
+                totalRow.push(total);
+            });
+            while (totalRow.length < 9) totalRow.push('');
+            this.addDataRow(totalRow);
+
+            this.addEmptyDataRow();
+        });
     }
 
     async generateForGroup(groupName, companiesData = null) {
@@ -715,11 +927,12 @@ class XlsxGeneratorService {
             // Se os dados das empresas foram fornecidos, usa eles; senão busca da API
             let companies;
             if (companiesData && Array.isArray(companiesData) && companiesData.length > 0) {
-                companies = companiesData;
-                logger.info(`Usando dados fornecidos: ${companies.length} empresas`);
+                companies = companiesData.map(c => this.normalizeCompany(c));
+                logger.info(`Usando dados fornecidos: ${companies.length} empresas (normalizadas)`);
             } else {
-                companies = await this.fetchGroupData(groupName);
-                logger.info(`Dados buscados da API: ${companies ? companies.length : 0} empresas`);
+                const rawCompanies = await this.fetchGroupData(groupName);
+                companies = Array.isArray(rawCompanies) ? rawCompanies.map(c => this.normalizeCompany(c)) : [];
+                logger.info(`Dados buscados da API: ${companies ? companies.length : 0} empresas (normalizadas)`);
             }
             
             if (!companies || companies.length === 0) {
@@ -763,6 +976,8 @@ class XlsxGeneratorService {
             const filePath = path.join(this.outputDir, fileName);
             
             logger.info('💾 Salvando arquivo...');
+            
+            // Configurar options para garantir UTF-8
             await this.workbook.xlsx.writeFile(filePath);
 
             logger.info('✅ Planilha gerada com sucesso!');
@@ -782,6 +997,103 @@ class XlsxGeneratorService {
 
         } catch (error) {
             logger.error('Erro ao gerar planilha:', error.message);
+            throw error;
+        }
+    }
+
+    // Novo método para gerar planilhas por tipo
+    async generateSpreadsheetByType(groupName, companiesData, tipo = 'entrada') {
+        try {
+            logger.info(`Gerando planilha tipo "${tipo}" para o grupo: ${groupName}`);
+            
+            let companies;
+            if (companiesData && Array.isArray(companiesData) && companiesData.length > 0) {
+                companies = companiesData.map(c => this.normalizeCompany(c));
+                logger.info(`Usando dados fornecidos: ${companies.length} empresas (normalizadas)`);
+            } else {
+                const rawCompanies = await this.fetchGroupData(groupName);
+                companies = Array.isArray(rawCompanies) ? rawCompanies.map(c => this.normalizeCompany(c)) : [];
+                logger.info(`Dados buscados da API: ${companies ? companies.length : 0} empresas (normalizadas)`);
+            }
+            
+            if (!companies || companies.length === 0) {
+                throw new Error('Nenhuma empresa encontrada para o grupo especificado');
+            }
+
+            // Reset das variáveis para nova geração
+            this.workbook = new ExcelJS.Workbook();
+            this.worksheet = null;
+            this.currentRow = 1;
+            this.dataRows = [];
+
+            this.companyNames = companies.map(company => this.truncateCompanyName(company.nome_fantasia)).filter(name => name.trim() !== '');
+            logger.info(`📋 Nomes de empresas identificados: ${this.companyNames.length} (máx. ${this.maxCompanyNameLength} chars)`);
+
+            logger.info(`📊 Coletando dados para planilha tipo: ${tipo}`);
+            
+            if (tipo === 'entrada') {
+                // Planilha de entrada (original)
+                this.addGroupHeader(groupName);
+                this.addCompanyBasicInfo(companies);
+                this.addContractedServices(companies);
+                this.addMainContact(companies);
+                this.addBusinessUnderstanding(companies);
+                this.addPayroll(companies);
+                this.addSystemsInfo(companies);
+                this.addAccountingInfo(companies);
+                this.addCommercialInfo(companies);
+            } else if (tipo === 'cobranca') {
+                // Planilha de honorários e cobrança
+                this.addGroupHeader(groupName);
+                this.addCompanyBasicInfo(companies);
+                this.addContractedServices(companies);
+                this.addMainContact(companies);
+                this.addBusinessUnderstanding(companies);
+                this.addPayroll(companies);
+                this.addSystemsInfo(companies);
+                this.addAccountingInfo(companies);
+                this.addHonorarios(companies); // Nova seção
+                this.addCommercialInfo(companies);
+            }
+
+            const fixedWidths = this.getFixedColumnWidths();
+
+            this.worksheet = this.workbook.addWorksheet('Board');
+            this.setupColumns(fixedWidths);
+
+            this.writeDataToWorksheet();
+
+            // Adiciona a imagem na linha 3
+            await this.addImageToWorksheet();
+
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            const tipoSuffix = tipo === 'entrada' ? 'Entrada' : 'Cobranca';
+            const fileName = `${groupName.replace(/\s+/g, '_')}_Ficha_${tipoSuffix}_${timestamp}.xlsx`;
+            const filePath = path.join(this.outputDir, fileName);
+            
+            logger.info('💾 Salvando arquivo...');
+            
+            // Configurar options para garantir UTF-8
+            await this.workbook.xlsx.writeFile(filePath);
+
+            logger.info(`✅ Planilha tipo "${tipo}" gerada com sucesso!`);
+            logger.info(`📁 Arquivo: ${fileName}`);
+            logger.info(`📈 Total de empresas: ${companies.length}`);
+            logger.info(`📄 Total de linhas: ${this.currentRow}`);
+
+            return {
+                success: true,
+                fileName: fileName,
+                filePath: filePath,
+                tipo: tipo,
+                stats: {
+                    companies: companies.length,
+                    rows: this.currentRow
+                }
+            };
+
+        } catch (error) {
+            logger.error(`Erro ao gerar planilha tipo "${tipo}":`, error.message);
             throw error;
         }
     }
@@ -889,6 +1201,48 @@ class XlsxGeneratorService {
         } catch (error) {
             logger.error('Erro na limpeza de arquivos:', error);
             return { deleted: 0, total: 0, error: error.message };
+        }
+    }
+
+    // Método para gerar dados da tabela em formato JSON para visualização
+    async generateTableData(groupName, companies) {
+        try {
+            if (!companies || companies.length === 0) {
+                throw new Error('Nenhuma empresa encontrada para gerar dados da tabela');
+            }
+
+            // Estrutura de dados similar à planilha
+            const tableData = {
+                header: {
+                    title: `Ficha de Entrada - ${groupName}`,
+                    empresas: companies.length,
+                    geradoEm: new Date().toLocaleString('pt-BR')
+                },
+                companies: companies.map(company => ({
+                    id: company.id || '',
+                    nome_fantasia: company.nome_fantasia || '',
+                    razao_social: company.razao_social || '',
+                    cnpj: company.cnpj || '',
+                    endereco: company.endereco || '',
+                    telefone: company.telefone || '',
+                    email: company.email || '',
+                    responsavel: company.responsavel || '',
+                    observacoes: company.observacoes || '',
+                    grupo: company.grupo || groupName,
+                    ativo: company.ativo || true
+                })),
+                summary: {
+                    totalEmpresas: companies.length,
+                    empresasAtivas: companies.filter(c => c.ativo !== false).length,
+                    grupos: [...new Set(companies.map(c => c.grupo || groupName))]
+                }
+            };
+
+            return tableData;
+
+        } catch (error) {
+            logger.error('Erro ao gerar dados da tabela:', error);
+            throw error;
         }
     }
 }

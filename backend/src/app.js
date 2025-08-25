@@ -11,6 +11,8 @@ const groupSearchRoutes = require('./routes/group-search.routes');
 const xlsxGeneratorRoutes = require('./routes/xlsx-generator.routes');
 const healthRoutes = require('./routes/health.routes');
 const syncRoutes = require('./routes/sync.routes');
+const userRoutes = require('./routes/user.routes');
+const excelViewerRoutes = require('./routes/excel-viewer.routes');
 
 // Middleware
 const errorHandler = require('./middleware/errorHandler');
@@ -22,7 +24,18 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // Security middleware
-app.use(helmet());
+app.use(helmet({
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc: ["'self'"],
+            styleSrc: ["'self'", "'unsafe-inline'"],
+            scriptSrc: ["'self'"],
+            imgSrc: ["'self'", "data:"],
+            frameAncestors: ["'self'", "http://localhost:3000"], // Permitir iframe do frontend
+        },
+    },
+    crossOriginEmbedderPolicy: false,
+}));
 app.use(cors({
     origin: process.env.NODE_ENV === 'production' 
         ? ['https://seudominio.com'] 
@@ -51,12 +64,16 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Health check (sem rate limit)
 app.use('/health', healthRoutes);
 
+// Excel viewer (sem autenticação para iframe)
+app.use('/excel-viewer', excelViewerRoutes);
+
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/companies', companyRoutes);
 app.use('/api/group-search', groupSearchRoutes);
 app.use('/api/xlsx-generator', xlsxGeneratorRoutes);
 app.use('/api/sync', syncRoutes);
+app.use('/api/users', userRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {

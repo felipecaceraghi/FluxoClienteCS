@@ -107,6 +107,64 @@ const schemas = {
             })
     }),
 
+    // Geração de planilha dupla
+    generateDualSpreadsheet: Joi.object({
+        grupo: Joi.string()
+            .required()
+            .messages({
+                'any.required': 'Nome do grupo é obrigatório'
+            }),
+        tiposPlanilha: Joi.array()
+            .items(Joi.string().valid('entrada', 'cobranca'))
+            .min(1)
+            .max(2)
+            .default(['entrada', 'cobranca'])
+            .messages({
+                'array.min': 'Pelo menos um tipo de planilha deve ser especificado',
+                'array.max': 'Máximo dois tipos de planilha permitidos',
+                'any.only': 'Tipos permitidos: entrada, cobranca'
+            }),
+        enviarSeparado: Joi.boolean()
+            .default(true)
+            .messages({
+                'boolean.base': 'enviarSeparado deve ser true ou false'
+            }),
+        emailDestinatario: Joi.string()
+            .email()
+            .default('felipe.caceraghi@gofurthergroup.com.br')
+            .messages({
+                'string.email': 'Email deve ter um formato válido'
+            })
+    }),
+
+    // Validação e envio de planilha dupla
+    validateAndSendDual: Joi.object({
+        fileNames: Joi.array()
+            .items(Joi.string().pattern(/\.xlsx$/))
+            .min(1)
+            .max(2)
+            .required()
+            .messages({
+                'array.min': 'Pelo menos um arquivo deve ser fornecido',
+                'array.max': 'Máximo dois arquivos permitidos',
+                'string.pattern.base': 'Arquivos devem ter extensão .xlsx',
+                'any.required': 'Lista de arquivos é obrigatória'
+            }),
+        grupo: Joi.string()
+            .required()
+            .messages({
+                'any.required': 'Nome do grupo é obrigatório'
+            }),
+        approved: Joi.boolean()
+            .required()
+            .messages({
+                'boolean.base': 'approved deve ser true ou false',
+                'any.required': 'approved é obrigatório'
+            }),
+        enviarSeparado: Joi.boolean()
+            .default(true)
+    }),
+
     // Cliente
     cliente: Joi.object({
         codigo: Joi.string()
@@ -437,5 +495,7 @@ module.exports = {
     validateResetPassword: validate(schemas.resetPassword),
     validateSearchCompanies: validate(schemas.searchCompanies, 'query'),
     validateGenerateReport: validate(schemas.generateReport),
-    validateClienteData: validate(schemas.cliente)
+    validateClienteData: validate(schemas.cliente),
+    validateGenerateDualSpreadsheet: validate(schemas.generateDualSpreadsheet),
+    validateAndSendDual: validate(schemas.validateAndSendDual)
 };

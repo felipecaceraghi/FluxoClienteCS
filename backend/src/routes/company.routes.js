@@ -14,14 +14,19 @@ router.get('/search',
     companyController.search
 );
 
-// Buscar todas as empresas
-router.get('/', 
-    companyController.getAll
+// Contar total de empresas
+router.get('/count', 
+    companyController.getCount
 );
 
 // Estatísticas das empresas
 router.get('/stats', 
     companyController.getStats
+);
+
+// Buscar todas as empresas
+router.get('/', 
+    companyController.getAll
 );
 
 // Buscar empresa por código

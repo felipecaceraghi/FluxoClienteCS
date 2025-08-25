@@ -72,6 +72,43 @@ router.post('/run-now', async (req, res) => {
 });
 
 /**
+ * @route POST /api/sync/manual
+ * @desc Executar sincronização manual (alias)
+ * @access Private
+ */
+router.post('/manual', async (req, res) => {
+    try {
+        // Verificar se já há sincronização em andamento
+        if (syncService.isCurrentlyRunning()) {
+            return res.status(409).json({
+                success: false,
+                message: 'Sincronização já está em andamento'
+            });
+        }
+
+        logger.info(`Usuário ${req.user.email} iniciou sincronização manual`);
+
+        // Executar sincronização
+        const result = await syncService.forceSyncNow();
+
+        res.json({
+            success: result.success,
+            message: result.message,
+            stats: result.stats,
+            error: result.error
+        });
+
+    } catch (error) {
+        logger.error('Erro na sincronização manual:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erro ao executar sincronização',
+            error: error.message
+        });
+    }
+});
+
+/**
  * @route GET /api/sync/stats
  * @desc Obter estatísticas detalhadas da última sincronização
  * @access Private

@@ -57,6 +57,20 @@ class CompanyService {
         }
     }
 
+    async getCompaniesCount() {
+        try {
+            const companies = await companyRepository.getAll();
+            
+            return {
+                success: true,
+                count: companies.length
+            };
+        } catch (error) {
+            console.error('Erro ao contar empresas:', error);
+            throw error;
+        }
+    }
+
     async getCompaniesStats() {
         try {
             const stats = await companyRepository.getStats();
