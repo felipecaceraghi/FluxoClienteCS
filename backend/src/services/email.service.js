@@ -168,17 +168,11 @@ class EmailService {
                     border-radius: 5px;
                     margin: 20px 0;
                     font-weight: bold;
+                    font-size: 16px;
+                    letter-spacing: 0.5px;
                 }
                 .button:hover {
                     background-color: #2980b9;
-                }
-                .token-info {
-                    background-color: #ecf0f1;
-                    padding: 15px;
-                    border-radius: 5px;
-                    margin: 15px 0;
-                    font-family: monospace;
-                    word-break: break-all;
                 }
                 .warning {
                     background-color: #f39c12;
@@ -198,30 +192,18 @@ class EmailService {
         </head>
         <body>
             <div class="header">
-                <h1>🔒 FluxoClienteCS</h1>
+                <h1>FluxoClienteCS</h1>
                 <p>Recuperação de Senha</p>
             </div>
-            
             <div class="content">
                 <h2>Olá${userName ? `, ${userName}` : ''}!</h2>
-                
                 <p>Você solicitou a recuperação de senha para sua conta no sistema FluxoClienteCS.</p>
-                
-                <p>Para redefinir sua senha, clique no botão abaixo ou copie o token fornecido:</p>
-                
-                <a href="${resetUrl}" class="button">🔑 Redefinir Senha</a>
-                
-                <div class="token-info">
-                    <strong>Token de recuperação:</strong><br>
-                    <code>${token}</code>
-                </div>
-                
+                <p>Para redefinir sua senha, clique no botão abaixo:</p>
+                <a href="${resetUrl}" class="button">Redefinir Senha</a>
                 <div class="warning">
-                    ⚠️ <strong>Importante:</strong> Este link expira em 1 hora por motivos de segurança.
+                    <strong>Importante:</strong> Este link expira em 1 hora por motivos de segurança.
                 </div>
-                
                 <p>Se você não solicitou esta recuperação, pode ignorar este email com segurança.</p>
-                
                 <p><strong>Dicas de segurança:</strong></p>
                 <ul>
                     <li>Use uma senha forte com letras, números e símbolos</li>
@@ -229,7 +211,6 @@ class EmailService {
                     <li>Faça logout ao usar computadores compartilhados</li>
                 </ul>
             </div>
-            
             <div class="footer">
                 <p>Este é um email automático do sistema FluxoClienteCS.</p>
                 <p>Se você tiver problemas, entre em contato com o suporte.</p>
