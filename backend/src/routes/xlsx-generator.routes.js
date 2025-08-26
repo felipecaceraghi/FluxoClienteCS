@@ -142,7 +142,15 @@ router.post('/test-email', xlsxGeneratorController.testEmail);
 // POST /api/xlsx-generator/test-image
 router.post('/test-image', xlsxGeneratorController.testImageConversion);
 
-// Gerar planilha XLSX para um grupo específico
+// Gerar planilha XLSX de SAÍDA para um grupo específico
+// GET /api/xlsx-generator/generate-saida/:grupo
+router.get('/generate-saida/:grupo', xlsxGeneratorController.generateSaidaForGroup);
+
+// Gerar planilha XLSX de SAÍDA para um cliente específico
+// GET /api/xlsx-generator/generate-saida-cliente/:cliente
+router.get('/generate-saida-cliente/:cliente', xlsxGeneratorController.generateSaidaForClient);
+
+// Gerar planilha XLSX para um grupo específico (ENTRADA)
 // GET /api/xlsx-generator/generate/:grupo
 router.get('/generate/:grupo', xlsxGeneratorController.generateForGroup);
 

@@ -1,9 +1,129 @@
 const xlsxGeneratorService = require('../services/xlsx-generator.service');
+const xlsxSaidaGeneratorService = require('../services/xlsx-saida-generator.service');
 const groupSearchService = require('../services/group-search.service');
 const logger = require('../utils/logger');
 
 class XlsxGeneratorController {
-    // Gerar planilha XLSX para um grupo específico
+    // Gerar planilha de SAÍDA para um grupo específico
+    async generateSaidaForGroup(req, res) {
+        try {
+            const { grupo } = req.params;
+            
+            if (!grupo) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Parâmetro grupo é obrigatório'
+                });
+            }
+
+            logger.info('📊 Solicitação de geração de XLSX de Saída', { 
+                grupo, 
+                usuario: req.user?.email || 'unknown' 
+            });
+
+            // Gerar planilha de saída usando o novo serviço
+            const generationResult = await xlsxSaidaGeneratorService.generateSaidaGrupoReport(grupo);
+            
+            if (!generationResult.success) {
+                throw new Error('Falha na geração da planilha de saída');
+            }
+
+            // Limpar arquivos antigos em background
+            setImmediate(() => {
+                xlsxGeneratorService.cleanupOldFiles();
+            });
+
+            // Retornar informações do arquivo para visualização
+            return res.json({
+                success: true,
+                message: 'Planilha de saída gerada com sucesso',
+                data: {
+                    fileName: generationResult.fileName,
+                    downloadUrl: `/api/xlsx-generator/download/${generationResult.fileName}`,
+                    viewUrl: `/api/xlsx-generator/view/${generationResult.fileName}`,
+                    grupo: grupo,
+                    empresas: generationResult.totalRegistros,
+                    tipo: 'saida',
+                    geradoEm: new Date().toISOString()
+                }
+            });
+
+        } catch (error) {
+            logger.error('❌ Erro ao gerar planilha XLSX de saída', {
+                grupo: req.params.grupo,
+                error: error.message,
+                stack: error.stack
+            });
+
+            return res.status(500).json({
+                success: false,
+                error: 'Erro interno do servidor ao gerar planilha de saída',
+                message: error.message
+            });
+        }
+    }
+
+    // Gerar planilha de SAÍDA para um cliente específico
+    async generateSaidaForClient(req, res) {
+        try {
+            const { cliente } = req.params;
+            
+            if (!cliente) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Parâmetro cliente é obrigatório'
+                });
+            }
+
+            logger.info('📊 Solicitação de geração de XLSX de Saída por Cliente', { 
+                cliente, 
+                usuario: req.user?.email || 'unknown' 
+            });
+
+            // Gerar planilha de saída usando o novo serviço
+            const generationResult = await xlsxSaidaGeneratorService.generateSaidaClienteReport(cliente);
+            
+            if (!generationResult.success) {
+                throw new Error('Falha na geração da planilha de saída por cliente');
+            }
+
+            // Limpar arquivos antigos em background
+            setImmediate(() => {
+                xlsxGeneratorService.cleanupOldFiles();
+            });
+
+            // Retornar informações do arquivo para visualização
+            return res.json({
+                success: true,
+                message: 'Planilha de saída gerada com sucesso',
+                data: {
+                    fileName: generationResult.fileName,
+                    downloadUrl: `/api/xlsx-generator/download/${generationResult.fileName}`,
+                    viewUrl: `/api/xlsx-generator/view/${generationResult.fileName}`,
+                    cliente: cliente,
+                    grupo: generationResult.grupo,
+                    empresas: generationResult.totalRegistros,
+                    tipo: 'saida',
+                    geradoEm: new Date().toISOString()
+                }
+            });
+
+        } catch (error) {
+            logger.error('❌ Erro ao gerar planilha XLSX de saída por cliente', {
+                cliente: req.params.cliente,
+                error: error.message,
+                stack: error.stack
+            });
+
+            return res.status(500).json({
+                success: false,
+                error: 'Erro interno do servidor ao gerar planilha de saída por cliente',
+                message: error.message
+            });
+        }
+    }
+
+    // Gerar planilha XLSX para um grupo específico (ENTRADA)
     async generateForGroup(req, res) {
         try {
             const { grupo } = req.params;

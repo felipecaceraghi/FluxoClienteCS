@@ -75,11 +75,11 @@ const schemas = {
         q: Joi.string()
             .min(1)
             .max(100)
-            .required()
+            .allow('', null)
+            .optional()
             .messages({
                 'string.min': 'Termo de busca deve ter pelo menos 1 caractere',
-                'string.max': 'Termo de busca deve ter no máximo 100 caracteres',
-                'any.required': 'Termo de busca é obrigatório'
+                'string.max': 'Termo de busca deve ter no máximo 100 caracteres'
             }),
         page: Joi.number()
             .integer()

@@ -6,28 +6,67 @@ class CompanyRepository {
         try {
             const offset = (page - 1) * limit;
             
-            // Busca por código ou nome
+            if (!query || query.trim().length === 0) {
+                // Se não há query, retornar todas as empresas ativas
+                const searchQuery = `
+                    SELECT id, codigo, nome, grupo, created_at, updated_at
+                    FROM companies 
+                    WHERE active = 1 
+                    ORDER BY nome ASC
+                    LIMIT ? OFFSET ?
+                `;
+                
+                const companies = await db.query(searchQuery, [limit, offset]);
+
+                const countQuery = `SELECT COUNT(*) as total FROM companies WHERE active = 1`;
+                const countResult = await db.get(countQuery);
+                const total = countResult.total;
+
+                return {
+                    companies,
+                    pagination: {
+                        page,
+                        limit,
+                        total,
+                        totalPages: Math.ceil(total / limit),
+                        hasNext: page * limit < total,
+                        hasPrev: page > 1
+                    }
+                };
+            }
+            
+            // Busca por código, nome ou grupo
             const searchQuery = `
-                SELECT id, codigo, nome, created_at, updated_at
+                SELECT id, codigo, nome, grupo, created_at, updated_at
                 FROM companies 
                 WHERE active = 1 
-                AND (LOWER(codigo) LIKE LOWER(?) OR LOWER(nome) LIKE LOWER(?))
-                ORDER BY nome ASC
+                AND (LOWER(codigo) LIKE LOWER(?) OR LOWER(nome) LIKE LOWER(?) OR LOWER(grupo) LIKE LOWER(?))
+                ORDER BY 
+                    CASE 
+                        WHEN LOWER(grupo) LIKE LOWER(?) THEN 1
+                        WHEN LOWER(nome) LIKE LOWER(?) THEN 2
+                        ELSE 3
+                    END,
+                    nome ASC
                 LIMIT ? OFFSET ?
             `;
             
             const searchTerm = `%${query}%`;
-            const companies = await db.query(searchQuery, [searchTerm, searchTerm, limit, offset]);
+            const companies = await db.query(searchQuery, [
+                searchTerm, searchTerm, searchTerm, // WHERE conditions
+                searchTerm, searchTerm, // ORDER BY conditions
+                limit, offset
+            ]);
 
             // Contar total para paginação
             const countQuery = `
                 SELECT COUNT(*) as total
                 FROM companies 
                 WHERE active = 1 
-                AND (LOWER(codigo) LIKE LOWER(?) OR LOWER(nome) LIKE LOWER(?))
+                AND (LOWER(codigo) LIKE LOWER(?) OR LOWER(nome) LIKE LOWER(?) OR LOWER(grupo) LIKE LOWER(?))
             `;
             
-            const countResult = await db.get(countQuery, [searchTerm, searchTerm]);
+            const countResult = await db.get(countQuery, [searchTerm, searchTerm, searchTerm]);
             const total = countResult.total;
 
             return {
@@ -43,6 +82,60 @@ class CompanyRepository {
             };
         } catch (error) {
             console.error('Erro ao buscar empresas:', error);
+            throw error;
+        }
+    }
+
+    // Novo método para buscar grupos e nomes únicos (para autocomplete)
+    async searchGroupsAndNames(query, limit = 20) {
+        try {
+            const searchTerm = `%${query}%`;
+            
+            // Buscar grupos únicos
+            const groupsQuery = `
+                SELECT DISTINCT grupo as value, 'grupo' as type, COUNT(*) as count
+                FROM companies 
+                WHERE active = 1 
+                AND grupo IS NOT NULL 
+                AND LOWER(grupo) LIKE LOWER(?)
+                GROUP BY grupo
+                ORDER BY COUNT(*) DESC, grupo ASC
+                LIMIT ?
+            `;
+            
+            const groups = await db.query(groupsQuery, [searchTerm, Math.ceil(limit / 2)]);
+            
+            // Buscar nomes únicos
+            const namesQuery = `
+                SELECT DISTINCT nome as value, 'nome' as type, codigo
+                FROM companies 
+                WHERE active = 1 
+                AND LOWER(nome) LIKE LOWER(?)
+                ORDER BY nome ASC
+                LIMIT ?
+            `;
+            
+            const names = await db.query(namesQuery, [searchTerm, Math.ceil(limit / 2)]);
+            
+            // Combinar e ordenar resultados
+            const results = [
+                ...groups.map(g => ({
+                    value: g.value,
+                    type: 'grupo',
+                    count: g.count,
+                    label: `${g.value} (${g.count} empresa${g.count > 1 ? 's' : ''})`
+                })),
+                ...names.map(n => ({
+                    value: n.value,
+                    type: 'nome',
+                    codigo: n.codigo,
+                    label: `${n.value} (${n.codigo})`
+                }))
+            ];
+            
+            return results.slice(0, limit);
+        } catch (error) {
+            console.error('Erro ao buscar grupos e nomes:', error);
             throw error;
         }
     }

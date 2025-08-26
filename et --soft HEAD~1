@@ -1,0 +1,78 @@
+[33mcommit f1f0e6f637b09022e3b767149032d0f8bcc8597b[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m
+Author: Caceraghigofurther <felipecaceraghi@gmail.com>
+Date:   Tue Aug 26 08:11:36 2025 -0300
+
+    chore(secrets): remove hardcoded SharePoint client secrets; require env var and warn at runtime
+
+[33mcommit ab03949e0d4999c6085a83b0cb2e3ce929a3d5d8[m
+Author: Caceraghigofurther <felipecaceraghi@gmail.com>
+Date:   Tue Aug 26 08:04:16 2025 -0300
+
+    Adicionando lógica de planilha de saida
+
+[33mcommit 65ad8b88b9e1e85b65134e20d767e96e1346a33e[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m
+Author: Caceraghigofurther <felipecaceraghi@gmail.com>
+Date:   Mon Aug 25 11:42:30 2025 -0300
+
+    alterando layout do e-mail de recuperação de senha
+
+[33mcommit 2c20f365b91868359212012b27df6036d3262e2b[m
+Author: Caceraghigofurther <felipecaceraghi@gmail.com>
+Date:   Mon Aug 25 11:15:44 2025 -0300
+
+    Resolvendo bug no headers
+
+[33mcommit b3ac420c0945e043292f0edd6e58df16999a7aef[m
+Author: Caceraghigofurther <felipecaceraghi@gmail.com>
+Date:   Mon Aug 25 11:08:43 2025 -0300
+
+    Ajustando links da api corretament
+
+[33mcommit 92422fae2b419686c3404be959296dbbbf835be7[m
+Author: Caceraghigofurther <felipecaceraghi@gmail.com>
+Date:   Mon Aug 25 10:49:49 2025 -0300
+
+    adiciona headers para bypass do localtunnel em produção
+
+[33mcommit 5a6076a370925b35a09b6128c10ec4dae93d2769[m
+Merge: 4d315cd dcfe576
+Author: Caceraghigofurther <felipecaceraghi@gmail.com>
+Date:   Mon Aug 25 10:29:47 2025 -0300
+
+    Merge branch 'main' of https://github.com/felipecaceraghi/FluxoClienteCS
+
+[33mcommit 4d315cde9be6785184cdc06dc99e599318741123[m
+Author: Caceraghigofurther <felipecaceraghi@gmail.com>
+Date:   Mon Aug 25 10:28:56 2025 -0300
+
+    Subindo frontend
+
+[33mcommit dcfe57633cc6103197c0cdcc11d270625e848289[m
+Author: Felipe Caceraghi Parnaiba <83252949+felipecaceraghi@users.noreply.github.com>
+Date:   Sat Aug 23 14:10:49 2025 -0300
+
+    Atualizar o README.md
+
+[33mcommit 19362693ac4395013943db135220238e7b2cd9b0[m
+Author: Caceraghigofurther <felipecaceraghi@gmail.com>
+Date:   Thu Aug 21 16:39:31 2025 -0300
+
+    Endpoint para geração de planilha final e disponibilzação de download
+
+[33mcommit 444656b72ff929123214d757445a0fb17b52f08a[m
+Author: Caceraghigofurther <felipecaceraghi@gmail.com>
+Date:   Wed Aug 20 18:18:13 2025 -0300
+
+    Adicionando recuperação de senha e fluxo que baixa a planilha do sharepoint e atualiza o banco com os dados da empresa
+
+[33mcommit 10fb735be2e6de7664c9bb7c960a33043bcba64a[m
+Author: Caceraghigofurther <felipecaceraghi@gmail.com>
+Date:   Wed Aug 20 16:10:27 2025 -0300
+
+    Fluxo de autenticação com email e senha
+
+[33mcommit e93c9b1b8dc9a493b187612584175c676d845fd0[m
+Author: Felipe Caceraghi Parnaiba <83252949+felipecaceraghi@users.noreply.github.com>
+Date:   Wed Aug 20 15:15:48 2025 -0300
+
+    Initial commit

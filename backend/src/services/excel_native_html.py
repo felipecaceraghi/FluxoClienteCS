@@ -44,7 +44,7 @@ def get_excel_native_html(excel_file_path):
             print("Aguardando cópia para clipboard...")
             time.sleep(5)
             
-            # Obter HTML EXATO do clipboard
+                # Obter HTML EXATO do clipboard
             win32clipboard.OpenClipboard()
             try:
                 native_html = None
@@ -56,7 +56,14 @@ def get_excel_native_html(excel_file_path):
                         html_data = win32clipboard.GetClipboardData(html_format)
                         if html_data:
                             if isinstance(html_data, bytes):
-                                native_html = html_data.decode('utf-8', errors='ignore')
+                                # Tentar decodificar em utf-8, senão usar cp1252 (Windows-1252) como fallback
+                                try:
+                                    native_html = html_data.decode('utf-8')
+                                except Exception:
+                                    try:
+                                        native_html = html_data.decode('cp1252')
+                                    except Exception:
+                                        native_html = html_data.decode('latin-1', errors='ignore')
                             else:
                                 native_html = str(html_data)
                             print(f"HTML Format obtido: {len(native_html)} caracteres")
@@ -64,14 +71,20 @@ def get_excel_native_html(excel_file_path):
                 except Exception as e:
                     print(f"Erro HTML Format: {e}")
                 
-                # Se não conseguiu HTML, tentar outros formatos
+                # Se não conseguiu HTML, tentar outros formatos (Unicode Text)
                 if not native_html:
                     try:
                         CF_UNICODETEXT = 13
                         if win32clipboard.IsClipboardFormatAvailable(CF_UNICODETEXT):
                             text_data = win32clipboard.GetClipboardData(CF_UNICODETEXT)
                             if text_data:
-                                native_html = str(text_data)
+                                if isinstance(text_data, bytes):
+                                    try:
+                                        native_html = text_data.decode('utf-8')
+                                    except Exception:
+                                        native_html = text_data.decode('cp1252', errors='ignore')
+                                else:
+                                    native_html = str(text_data)
                                 print(f"Unicode Text obtido: {len(native_html)} caracteres")
                     except Exception as e:
                         print(f"Erro Unicode Text: {e}")

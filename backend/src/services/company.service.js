@@ -3,11 +3,7 @@ const companyRepository = require('../repositories/company.repository');
 class CompanyService {
     async searchCompanies(query, page = 1, limit = 10) {
         try {
-            if (!query || query.trim().length === 0) {
-                throw new Error('Termo de busca é obrigatório');
-            }
-
-            const result = await companyRepository.search(query.trim(), page, limit);
+            const result = await companyRepository.search(query ? query.trim() : '', page, limit);
             
             return {
                 success: true,
@@ -16,6 +12,27 @@ class CompanyService {
             };
         } catch (error) {
             console.error('Erro ao buscar empresas:', error);
+            throw error;
+        }
+    }
+
+    // Novo método para autocomplete de grupos e nomes
+    async searchGroupsAndNames(query, limit = 20) {
+        try {
+            if (!query || query.trim().length < 2) {
+                return {
+                    success: true,
+                    data: []
+                };
+            }
+            
+            const results = await companyRepository.searchGroupsAndNames(query.trim(), limit);
+            return {
+                success: true,
+                data: results
+            };
+        } catch (error) {
+            console.error('Erro ao buscar grupos e nomes:', error);
             throw error;
         }
     }

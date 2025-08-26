@@ -8,6 +8,11 @@ const authenticateToken = require('../middleware/auth');
 // Todas as rotas de empresa exigem autenticação
 router.use(authenticateToken);
 
+// Autocomplete para grupos e nomes
+router.get('/autocomplete', 
+    companyController.autocomplete
+);
+
 // Buscar empresas com paginação
 router.get('/search', 
     validate(schemas.searchCompanies, 'query'), 

@@ -42,44 +42,23 @@ export default function Dashboard() {
 
   return (
     <Layout title="Dashboard - Fluxo Cliente CS" requireAuth={true}>
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center">
-              <img 
-                src="/logo.png" 
-                alt="Logo" 
-                className="h-10 w-auto mr-3 object-contain"
-              />
-              <h1 className="text-xl font-semibold text-gray-900">Fluxo Cliente CS</h1>
-            </div>
-            
-            <div className="flex items-center space-x-4">
-              <div className="text-sm text-gray-600">
-                Olá, <span className="font-medium">{user?.name}</span>
-                {user?.role === 'admin' && (
-                  <span className="ml-2 px-2 py-1 bg-purple-100 text-purple-800 text-xs rounded-full">
-                    Admin
-                  </span>
-                )}
-              </div>
-              
-              <button
-                onClick={handleLogout}
-                className="flex items-center px-3 py-2 text-sm text-gray-600 hover:text-gray-900 transition-colors"
-              >
-                <LogOut className="w-4 h-4 mr-2" />
-                Sair
-              </button>
-            </div>
-          </div>
-        </div>
-      </header>
-
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {user?.role === 'admin' ? <AdminDashboard /> : <UserDashboard />}
+        {user?.role === 'admin' ? (
+          <AdminDashboard />
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <a href="/dashboard/entrada" className="block p-6 bg-white border rounded-lg shadow hover:shadow-md transition">
+              <h3 className="text-lg font-semibold mb-2">Ficha de Entrada</h3>
+              <p className="text-sm text-gray-600">Gerar Ficha de Entrada e Honorários/Cobrança para um grupo ou empresa.</p>
+            </a>
+
+            <a href="/dashboard/saida" className="block p-6 bg-white border rounded-lg shadow hover:shadow-md transition">
+              <h3 className="text-lg font-semibold mb-2">Ficha de Saída</h3>
+              <p className="text-sm text-gray-600">Gerar planilhas de Saída (sem/com honorários) para um grupo ou empresa.</p>
+            </a>
+          </div>
+        )}
       </main>
     </Layout>
   );

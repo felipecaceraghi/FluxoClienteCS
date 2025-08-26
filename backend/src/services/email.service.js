@@ -1027,8 +1027,10 @@ Encaminho abaixo as informações referentes à Entrada de Cliente para ciência
             correctedHtml = correctedHtml.replace(/Certidçao/g, 'Certidao Negativa');
             correctedHtml = correctedHtml.replace(/Negativ[aã]/g, 'Negativa');
 
-            // Gerar corpo do email com HTML corrigido
-            const emailHTML = excelNativeService.generateEmailWithNativeHtml(grupo, correctedHtml);
+            // Gerar corpo do email e extrair imagens inline (se houver)
+            const genResult = excelNativeService.generateEmailWithNativeHtml(grupo, correctedHtml);
+            const emailHTML = genResult.html || '';
+            const inlineImages = genResult.inlineImages || [];
 
             const message = {
                 subject: subject,
@@ -1040,8 +1042,29 @@ Encaminho abaixo as informações referentes à Entrada de Cliente para ciência
                     emailAddress: {
                         address: to
                     }
-                }]
+                }],
+                attachments: []
             };
+
+            // Adicionar imagens inline como attachments compatíveis com Microsoft Graph
+            if (inlineImages.length > 0) {
+                for (const img of inlineImages) {
+                    try {
+                        message.attachments.push({
+                            '@odata.type': '#microsoft.graph.fileAttachment',
+                            name: img.filename || 'image.png',
+                            contentBytes: img.contentBytes,
+                            contentType: img.contentType || 'image/png',
+                            contentId: img.cid,
+                            isInline: true
+                        });
+
+                        console.log('📎 Imagem inline adicionada ao email:', { name: img.filename, cid: img.cid });
+                    } catch (err) {
+                        console.warn('⚠️ Falha ao adicionar imagem inline como anexo:', err.message);
+                    }
+                }
+            }
 
             console.log('📝 Email preparado com HTML NATIVO');
 

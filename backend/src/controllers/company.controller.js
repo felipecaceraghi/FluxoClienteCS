@@ -18,14 +18,26 @@ class CompanyController {
                 pagination: result.pagination
             });
         } catch (error) {
-            if (error.message === 'Termo de busca é obrigatório') {
-                return res.status(400).json({
-                    success: false,
-                    error: 'Termo de busca é obrigatório',
-                    code: 'QUERY_REQUIRED'
-                });
-            }
+            next(error);
+        }
+    }
 
+    // Novo método para autocomplete de grupos e nomes
+    async autocomplete(req, res, next) {
+        try {
+            const { q: query, limit } = req.query;
+
+            const result = await companyService.searchGroupsAndNames(
+                query, 
+                parseInt(limit) || 20
+            );
+
+            res.json({
+                success: true,
+                message: `${result.data.length} resultado(s) encontrado(s)`,
+                data: result.data
+            });
+        } catch (error) {
             next(error);
         }
     }
