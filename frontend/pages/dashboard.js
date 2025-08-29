@@ -53,10 +53,10 @@ export default function Dashboard() {
               <p className="text-sm text-gray-600">Gerar Ficha de Entrada e Honorários/Cobrança para um grupo ou empresa.</p>
             </a>
 
-            <a href="/dashboard/saida" className="block p-6 bg-white border rounded-lg shadow hover:shadow-md transition">
-              <h3 className="text-lg font-semibold mb-2">Ficha de Saída</h3>
-              <p className="text-sm text-gray-600">Gerar planilhas de Saída (sem/com honorários) para um grupo ou empresa.</p>
-            </a>
+            <div className="block p-6 bg-gray-100 border border-gray-300 rounded-lg shadow opacity-60" style={{ cursor: 'not-allowed' }}>
+              <h3 className="text-lg font-semibold mb-2 text-gray-500">Ficha de Saída</h3>
+              <p className="text-sm text-gray-500">Em Construção</p>
+            </div>
           </div>
         )}
       </main>

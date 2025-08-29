@@ -505,6 +505,8 @@ class XlsxGeneratorController {
     }
 
     // Validar e enviar planilhas duplas por email
+// DENTRO DO SEU ARQUIVO: xlsx-generator.controller.js
+
     async validateAndSendDual(req, res) {
         try {
             const { fileNames, grupo, approved, enviarSeparado } = req.body;
@@ -546,22 +548,44 @@ class XlsxGeneratorController {
                     const fileName = fileNames[i];
                     const filePath = xlsxGeneratorService.getFilePath(fileName);
                     
-                    // Determinar tipo da planilha pelo nome do arquivo
                     const tipoPlaniha = fileName.includes('_Entrada_') ? 'Entrada' : 
-                                       fileName.includes('_Cobranca_') ? 'Honorários e Cobrança' : 
-                                       `Planilha ${i + 1}`;
+                                        fileName.includes('_Cobranca_') ? 'Honorários e Cobrança' : 
+                                        `Planilha ${i + 1}`;
                     
-                    const emailSubject = `${tipoPlaniha} de Cliente - ${grupo} - Operação`;
+                    let destinatario;
+                    if (tipoPlaniha === 'Entrada') {
+                        destinatario = 'felipe.caceraghi@gofurthergroup.com.br';
+                    } else if (tipoPlaniha === 'Honorários e Cobrança') {
+                        destinatario = 'vinicius.oliveira@gofurthergroup.com.br';
+                    } else {
+                        destinatario = 'felipe.caceraghi@gofurthergroup.com.br';
+                    }
+                    
+                    // ===============================================================================
+                    // AQUI ESTÁ O AJUSTE DO ASSUNTO
+                    // ===============================================================================
+                    let emailSubject;
+
+                    if (tipoPlaniha === 'Entrada') {
+                        emailSubject = `Entrada de Cliente - ${grupo}`; // Formato novo e limpo
+                    } else if (tipoPlaniha === 'Honorários e Cobrança') {
+                        emailSubject = `Honorários e Cobrança de Cliente - ${grupo}`; // Formato limpo também
+                    } else {
+                        // Fallback para qualquer outro caso
+                        emailSubject = `${tipoPlaniha} de Cliente - ${grupo}`;
+                    }
+                    // ===============================================================================
                     
                     try {
                         logger.info(`📧 Enviando planilha ${i + 1}/${fileNames.length}: ${tipoPlaniha}`, {
                             arquivo: fileName,
-                            tipo: tipoPlaniha
+                            tipo: tipoPlaniha,
+                            para: destinatario
                         });
 
-                        await emailService.sendFileAsNativeHtmlEmail({
-                            to: 'felipe.caceraghi@gofurthergroup.com.br',
-                            subject: emailSubject,
+                        await emailService.sendFileAsCopiedRangeEmail({
+                            to: destinatario,
+                            subject: emailSubject, // <-- Usa a nova variável de assunto
                             grupo: grupo,
                             excelFilePath: filePath
                         });
@@ -570,10 +594,11 @@ class XlsxGeneratorController {
                             fileName: fileName,
                             tipo: tipoPlaniha,
                             emailSent: true,
-                            subject: emailSubject
+                            subject: emailSubject,
+                            sentTo: destinatario
                         });
 
-                        logger.info(`✅ Planilha ${tipoPlaniha} enviada com sucesso`);
+                        logger.info(`✅ Planilha ${tipoPlaniha} enviada com sucesso para ${destinatario}`);
 
                     } catch (emailError) {
                         logger.error(`❌ Erro ao enviar planilha ${tipoPlaniha}:`, {
@@ -590,13 +615,14 @@ class XlsxGeneratorController {
                     }
                 }
             } else {
-                // Enviar ambas as planilhas em um único email
+                // Lógica para enviar um e-mail único com anexos (mantida como estava)
                 const attachments = fileNames.map(fileName => ({
                     path: xlsxGeneratorService.getFilePath(fileName),
                     filename: fileName
                 }));
 
-                const emailSubject = `Entrada e Honorários de Cliente - ${grupo} - Operação`;
+                // Ajustando o assunto aqui também para manter a consistência
+                const emailSubject = `Entrada e Honorários de Cliente - ${grupo}`;
 
                 try {
                     logger.info('📧 Enviando email único com múltiplas planilhas', {
@@ -623,7 +649,6 @@ class XlsxGeneratorController {
 
                 } catch (emailError) {
                     logger.error('❌ Erro ao enviar email único:', emailError);
-
                     results.push({
                         fileNames: fileNames,
                         tipo: 'Múltiplas Planilhas',
@@ -633,11 +658,10 @@ class XlsxGeneratorController {
                 }
             }
 
-            // Salvar na pasta R:\Publico\felipec
+            // Lógica de salvar na rede (mantida como estava)
             const networkResults = [];
             try {
                 const networkPath = 'R:\\Publico\\felipec';
-                
                 if (!fs.existsSync(networkPath)) {
                     try {
                         fs.mkdirSync(networkPath, { recursive: true });
@@ -648,15 +672,12 @@ class XlsxGeneratorController {
                         });
                     }
                 }
-
                 for (const fileName of fileNames) {
                     try {
                         const filePath = xlsxGeneratorService.getFilePath(fileName);
                         const destPath = path.join(networkPath, fileName);
-                        
                         fs.copyFileSync(filePath, destPath);
                         networkResults.push({ fileName, saved: true });
-                        
                         logger.info('✅ Arquivo salvo na pasta de rede', { 
                             origem: filePath,
                             destino: destPath 
@@ -693,7 +714,6 @@ class XlsxGeneratorController {
                 error: error.message,
                 stack: error.stack
             });
-
             return res.status(500).json({
                 success: false,
                 error: 'Erro interno do servidor no processo de validação e envio duplo'

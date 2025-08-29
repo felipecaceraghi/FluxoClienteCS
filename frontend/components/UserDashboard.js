@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, FileSpreadsheet, Loader2, AlertCircle, ChevronDown, X, FileCheck, Building2, Users } from 'lucide-react';
+import { Search, FileSpreadsheet, Loader2, AlertCircle, ChevronDown, X, Building2, Users } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 
 import axios from 'axios';
@@ -21,6 +21,8 @@ export default function UserDashboard({ initialMode }) {
   const inputRef = useRef(null);
   const debounceRef = useRef(null);
 
+  const isSelectingRef = useRef(false);
+
   // Função para debounce da busca
   const debouncedSearch = (term) => {
     if (debounceRef.current) {
@@ -38,16 +40,24 @@ export default function UserDashboard({ initialMode }) {
   };
 
   useEffect(() => {
+    // Não faz busca se estamos no meio de uma seleção programática
+    if (isSelectingRef.current) {
+      return;
+    }
+
+    // Só limpa a seleção se o usuário está digitando algo diferente
     if (searchTerm !== (selectedItem?.value || '')) {
       setSelectedItem(null);
     }
+
+    // Faz busca apenas se o termo tem pelo menos 2 caracteres
     if (searchTerm.trim().length >= 2) {
       debouncedSearch(searchTerm);
     } else {
       setAutocompleteResults([]);
       setShowDropdown(false);
     }
-  }, [searchTerm]);
+  }, [searchTerm, selectedItem]);
 
   useEffect(() => {
     // Fechar dropdown quando clicar fora
@@ -123,20 +133,36 @@ export default function UserDashboard({ initialMode }) {
 
   // Single set of input handlers and actions (removed duplicate definitions)
   const handleItemSelect = (item) => {
+    // Previne qualquer busca durante a seleção
+    isSelectingRef.current = true;
+
+    // Define os valores diretamente
     setSelectedItem(item);
     setSearchTerm(item.value);
     setShowDropdown(false);
     setAutocompleteResults([]);
-    // Remover foco do input após um pequeno delay
+
+    // Libera o controle após um breve delay
     setTimeout(() => {
-      if (inputRef.current) inputRef.current.blur();
-    }, 100);
+      isSelectingRef.current = false;
+      if (inputRef.current) {
+        inputRef.current.blur();
+      }
+    }, 150);
   };
 
   const handleInputChange = (e) => {
     const value = e.target.value;
+
+    // Usuário está digitando, então libera qualquer controle programático
+    isSelectingRef.current = false;
+
     setSearchTerm(value);
-    if (value !== (selectedItem?.value || '')) setSelectedItem(null);
+
+    // Só limpa a seleção se o valor for diferente do item selecionado
+    if (value !== (selectedItem?.value || '')) {
+      setSelectedItem(null);
+    }
   };
 
   const handleInputKeyDown = (e) => {
@@ -274,8 +300,8 @@ export default function UserDashboard({ initialMode }) {
                 onKeyDown={handleInputKeyDown}
                 onBlur={handleInputBlur}
                 onFocus={() => {
-                  // Só mostra dropdown se ainda não tem item selecionado
-                  if (!selectedItem && autocompleteResults.length > 0) {
+                  // Só mostra dropdown se ainda não tem item selecionado e não é mudança programática
+                  if (!selectedItem && autocompleteResults.length > 0 && !isSelectingRef.current) {
                     setShowDropdown(true);
                   }
                 }}
@@ -439,7 +465,9 @@ export default function UserDashboard({ initialMode }) {
                 📊 Validar Planilhas Geradas
               </h3>
               <button
-                onClick={() => setSpreadsheetFiles(null)}
+                onClick={() => {
+                  setSpreadsheetFiles(null);
+                }}
                 className="text-gray-400 hover:text-gray-600"
               >
                 <X className="w-5 h-5" />
@@ -457,44 +485,6 @@ export default function UserDashboard({ initialMode }) {
                 </p>
                 <p className="text-sm text-blue-800">
                   <strong>Gerado em:</strong> {new Date(spreadsheetFiles.geradoEm).toLocaleString('pt-BR')}
-                </p>
-              </div>
-
-              <div className="space-y-3">
-                <h4 className="font-medium text-gray-900">Planilhas Geradas:</h4>
-                {spreadsheetFiles.planilhas.map((planilha, index) => (
-                  <div key={index} className="border border-gray-200 rounded-lg p-3">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-medium text-gray-900">
-                          {planilha.tipo === 'entrada' ? '📄 Ficha de Entrada' : '💰 Honorários e Cobrança'}
-                        </p>
-                        <p className="text-sm text-gray-600">{planilha.fileName}</p>
-                        <p className="text-sm text-gray-500">
-                          {planilha.totalLinhas} linhas • {planilha.totalEmpresas} empresas
-                        </p>
-                      </div>
-                      <div className="text-green-600">
-                        <FileCheck className="w-5 h-5" />
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                <h4 className="font-medium text-yellow-800 mb-2">⚠️ Configuração de Envio</h4>
-                <div className="space-y-2 text-sm text-yellow-700">
-                  <p><strong>Destino:</strong> felipe.caceraghi@gofurthergroup.com.br</p>
-                  <p><strong>Modo de envio:</strong> Emails separados (uma planilha por email)</p>
-                  <p><strong>Pasta de salvamento:</strong> R:\Publico\felipec</p>
-                </div>
-              </div>
-
-              <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
-                <p className="text-sm text-gray-600">
-                  <strong>Próximos passos:</strong> As planilhas foram baixadas para sua pasta de Downloads. 
-                  Verifique os arquivos e confirme se estão corretos antes de enviar por email.
                 </p>
               </div>
             </div>
