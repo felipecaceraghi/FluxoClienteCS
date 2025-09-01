@@ -58,7 +58,7 @@ export default function Dashboard() {
               style={{ cursor: 'not-allowed' }}
             >
               <h3 className="text-lg font-semibold mb-2 text-gray-500">Ficha de Saída</h3>
-              <p className="text-sm text-gray-500 flex items-center justify-center gap-2">
+              <p className="text-sm text-gray-500 flex items-center gap-2">
                 🚧 Em construção
               </p>
             </div>
