@@ -507,219 +507,230 @@ class XlsxGeneratorController {
     // Validar e enviar planilhas duplas por email
 // DENTRO DO SEU ARQUIVO: xlsx-generator.controller.js
 
-    async validateAndSendDual(req, res) {
-        try {
-            const { fileNames, grupo, approved, enviarSeparado } = req.body;
-            
-            if (!approved) {
-                return res.json({
-                    success: true,
-                    message: 'Planilhas rejeitadas pelo usuário',
-                    action: 'rejected'
-                });
-            }
+    // DENTRO DO SEU ARQUIVO: xlsx-generator.controller.js
 
-            logger.info('📧📧 Validação e envio de planilhas duplas', { 
-                arquivos: fileNames,
-                grupo: grupo,
-                enviarSeparado: enviarSeparado,
-                usuario: req.user?.email || 'unknown' 
-            });
+    async validateAndSendDual(req, res) {
+        try {
+            const { fileNames, grupo, approved, enviarSeparado } = req.body;
+            
+            if (!approved) {
+                return res.json({
+                    success: true,
+                    message: 'Planilhas rejeitadas pelo usuário',
+                    action: 'rejected'
+                });
+            }
 
-            // Verificar se todos os arquivos existem
-            for (const fileName of fileNames) {
-                if (!xlsxGeneratorService.fileExists(fileName)) {
-                    return res.status(404).json({
-                        success: false,
-                        error: `Arquivo não encontrado: ${fileName}`
-                    });
-                }
-            }
+            logger.info('📧📧 Validação e envio de planilhas duplas', { 
+                arquivos: fileNames,
+                grupo: grupo,
+                enviarSeparado: enviarSeparado,
+                usuario: req.user?.email || 'unknown' 
+            });
 
-            const emailService = require('../services/email.service');
-            const fs = require('fs');
-            const path = require('path');
-            
-            const results = [];
+            // Verificar se todos os arquivos existem
+            for (const fileName of fileNames) {
+                if (!xlsxGeneratorService.fileExists(fileName)) {
+                    return res.status(404).json({
+                        success: false,
+                        error: `Arquivo não encontrado: ${fileName}`
+                    });
+                }
+            }
 
-            if (enviarSeparado) {
-                // Enviar cada planilha separadamente
-                for (let i = 0; i < fileNames.length; i++) {
-                    const fileName = fileNames[i];
-                    const filePath = xlsxGeneratorService.getFilePath(fileName);
-                    
-                    const tipoPlaniha = fileName.includes('_Entrada_') ? 'Entrada' : 
-                                        fileName.includes('_Cobranca_') ? 'Honorários e Cobrança' : 
-                                        `Planilha ${i + 1}`;
-                    
-                    let destinatario;
-                    if (tipoPlaniha === 'Entrada') {
-                        destinatario = 'felipe.caceraghi@gofurthergroup.com.br';
-                    } else if (tipoPlaniha === 'Honorários e Cobrança') {
-                        destinatario = 'vinicius.oliveira@gofurthergroup.com.br';
-                    } else {
-                        destinatario = 'felipe.caceraghi@gofurthergroup.com.br';
-                    }
-                    
-                    // ===============================================================================
-                    // AQUI ESTÁ O AJUSTE DO ASSUNTO
-                    // ===============================================================================
-                    let emailSubject;
+            const emailService = require('../services/email.service');
+            const fs = require('fs');
+            const path = require('path');
+            
+            const results = [];
 
-                    if (tipoPlaniha === 'Entrada') {
-                        emailSubject = `Entrada de Cliente - ${grupo}`; // Formato novo e limpo
-                    } else if (tipoPlaniha === 'Honorários e Cobrança') {
-                        emailSubject = `Honorários e Cobrança de Cliente - ${grupo}`; // Formato limpo também
-                    } else {
-                        // Fallback para qualquer outro caso
-                        emailSubject = `${tipoPlaniha} de Cliente - ${grupo}`;
-                    }
-                    // ===============================================================================
-                    
-                    try {
-                        logger.info(`📧 Enviando planilha ${i + 1}/${fileNames.length}: ${tipoPlaniha}`, {
-                            arquivo: fileName,
-                            tipo: tipoPlaniha,
-                            para: destinatario
-                        });
+            if (enviarSeparado) {
+                // Enviar cada planilha separadamente
+                for (let i = 0; i < fileNames.length; i++) {
+                    const fileName = fileNames[i];
+                    const filePath = xlsxGeneratorService.getFilePath(fileName);
+                    
+                    const tipoPlaniha = fileName.includes('_Entrada_') ? 'Entrada' : 
+                                        fileName.includes('_Cobranca_') ? 'Honorários e Cobrança' : 
+                                        `Planilha ${i + 1}`;
+                    
+                        // ===============================================================================
+                        // ===== AQUI ESTÁ O AJUSTE =====
+                        // ===============================================================================
+                    let destinatario;
+                    if (tipoPlaniha === 'Entrada') {
+                        destinatario = 'grupointerno@gofurthergroup.com.br';
+                    } else if (tipoPlaniha === 'Honorários e Cobrança') {
+                        const listaDeEmails = [
+                                'johann.muller@gofurthergroup.com.br',
+                                'hugo.almeida@gofurthergroup.com.br',
+                                'rubens.moreira@gofurthergroup.com.br',
+                                'ana.moreira@gofurthergroup.com.br',
+                                'luana.oliveira@gofurthergroup.com.br',
+                                'financeironternoshare@gofurthergroup.com.br'
+                        ];
+                        destinatario = listaDeEmails.join(',');
+                    } else {
+                        // Fallback para qualquer outro caso
+                        destinatario = 'grupointerno@gofurthergroup.com.br';
+                    }
+                        // ===============================================================================
+                    
+                    let emailSubject;
 
-                        await emailService.sendFileAsCopiedRangeEmail({
-                            to: destinatario,
-                            subject: emailSubject, // <-- Usa a nova variável de assunto
-                            grupo: grupo,
-                            excelFilePath: filePath
-                        });
+                    if (tipoPlaniha === 'Entrada') {
+                        emailSubject = `Entrada de Cliente - ${grupo}`;
+                    } else if (tipoPlaniha === 'Honorários e Cobrança') {
+                        emailSubject = `Honorários e Cobrança de Cliente - ${grupo}`;
+                    } else {
+                        emailSubject = `${tipoPlaniha} de Cliente - ${grupo}`;
+                    }
+                    
+                    try {
+                        logger.info(`📧 Enviando planilha ${i + 1}/${fileNames.length}: ${tipoPlaniha}`, {
+                            arquivo: fileName,
+                            tipo: tipoPlaniha,
+                            para: destinatario
+                        });
 
-                        results.push({
-                            fileName: fileName,
-                            tipo: tipoPlaniha,
-                            emailSent: true,
-                            subject: emailSubject,
-                            sentTo: destinatario
-                        });
+                        await emailService.sendFileAsImageEmail({
+                            to: destinatario,
+                            subject: emailSubject,
+                            grupo: grupo,
+                            excelFilePath: filePath
+                        });
 
-                        logger.info(`✅ Planilha ${tipoPlaniha} enviada com sucesso para ${destinatario}`);
+                        results.push({
+                            fileName: fileName,
+                            tipo: tipoPlaniha,
+                            emailSent: true,
+                            subject: emailSubject,
+                            sentTo: destinatario
+                        });
 
-                    } catch (emailError) {
-                        logger.error(`❌ Erro ao enviar planilha ${tipoPlaniha}:`, {
-                            erro: emailError.message,
-                            arquivo: fileName
-                        });
+                        logger.info(`✅ Planilha ${tipoPlaniha} enviada com sucesso para ${destinatario}`);
 
-                        results.push({
-                            fileName: fileName,
-                            tipo: tipoPlaniha,
-                            emailSent: false,
-                            error: emailError.message
-                        });
-                    }
-                }
-            } else {
-                // Lógica para enviar um e-mail único com anexos (mantida como estava)
-                const attachments = fileNames.map(fileName => ({
-                    path: xlsxGeneratorService.getFilePath(fileName),
-                    filename: fileName
-                }));
+                    } catch (emailError) {
+                        logger.error(`❌ Erro ao enviar planilha ${tipoPlaniha}:`, {
+                            erro: emailError.message,
+                            arquivo: fileName
+                        });
 
-                // Ajustando o assunto aqui também para manter a consistência
-                const emailSubject = `Entrada e Honorários de Cliente - ${grupo}`;
+                        results.push({
+                            fileName: fileName,
+                            tipo: tipoPlaniha,
+                            emailSent: false,
+                            error: emailError.message
+                        });
+                    }
+                }
+            } else {
+                // Lógica para enviar um e-mail único com anexos (mantida como estava)
+                const attachments = fileNames.map(fileName => ({
+                    path: xlsxGeneratorService.getFilePath(fileName),
+                    filename: fileName
+                }));
 
-                try {
-                    logger.info('📧 Enviando email único com múltiplas planilhas', {
-                        arquivos: fileNames.length,
-                        anexos: attachments.length
-                    });
+                const emailSubject = `Entrada e Honorários de Cliente - ${grupo}`;
 
-                    await emailService.sendFileByEmail({
-                        to: 'felipe.caceraghi@gofurthergroup.com.br',
-                        subject: emailSubject,
-                        text: `Segue em anexo as planilhas de Entrada e Honorários do grupo ${grupo}.`,
-                        attachments: attachments
-                    });
+                try {
+                    logger.info('📧 Enviando email único com múltiplas planilhas', {
+                        arquivos: fileNames.length,
+                        anexos: attachments.length
+                    });
 
-                    results.push({
-                        fileNames: fileNames,
-                        tipo: 'Múltiplas Planilhas',
-                        emailSent: true,
-                        subject: emailSubject,
-                        attachments: attachments.length
-                    });
+                    await emailService.sendMultipleSpreadsheetsInOne({
+                        spreadsheets: fileNames.map(fileName => ({
+                            fileName: fileName,
+                            filePath: xlsxGeneratorService.getFilePath(fileName)
+                        })),
+                        grupo: grupo,
+                        baseEmailAddress: 'felipe.caceraghi@gofurthergroup.com.br'
+                    });
 
-                    logger.info('✅ Email único com múltiplas planilhas enviado com sucesso');
+                    results.push({
+                        fileNames: fileNames,
+                        tipo: 'Múltiplas Planilhas',
+                        emailSent: true,
+                        subject: emailSubject,
+                        attachments: attachments.length
+                    });
 
-                } catch (emailError) {
-                    logger.error('❌ Erro ao enviar email único:', emailError);
-                    results.push({
-                        fileNames: fileNames,
-                        tipo: 'Múltiplas Planilhas',
-                        emailSent: false,
-                        error: emailError.message
-                    });
-                }
-            }
+                    logger.info('✅ Email único com múltiplas planilhas enviado com sucesso');
 
-            // Lógica de salvar na rede (mantida como estava)
-            const networkResults = [];
-            try {
-                const networkPath = 'R:\\Publico\\felipec';
-                if (!fs.existsSync(networkPath)) {
-                    try {
-                        fs.mkdirSync(networkPath, { recursive: true });
-                    } catch (mkdirError) {
-                        logger.warn('⚠️ Não foi possível acessar/criar pasta de rede', { 
-                            path: networkPath,
-                            error: mkdirError.message 
-                        });
-                    }
-                }
-                for (const fileName of fileNames) {
-                    try {
-                        const filePath = xlsxGeneratorService.getFilePath(fileName);
-                        const destPath = path.join(networkPath, fileName);
-                        fs.copyFileSync(filePath, destPath);
-                        networkResults.push({ fileName, saved: true });
-                        logger.info('✅ Arquivo salvo na pasta de rede', { 
-                            origem: filePath,
-                            destino: destPath 
-                        });
-                    } catch (copyError) {
-                        networkResults.push({ fileName, saved: false, error: copyError.message });
-                        logger.error('❌ Erro ao salvar arquivo na rede', { 
-                            arquivo: fileName, 
-                            error: copyError.message 
-                        });
-                    }
-                }
-            } catch (networkError) {
-                logger.error('❌ Erro geral na pasta de rede', networkError);
-            }
+                } catch (emailError) {
+                    logger.error('❌ Erro ao enviar email único:', emailError);
+                    results.push({
+                          fileNames: fileNames,
+                        tipo: 'Múltiplas Planilhas',
+                        emailSent: false,
+                        error: emailError.message
+                    });
+                }
+            }
 
-            const emailsSent = results.filter(r => r.emailSent).length;
-            const filesNetworkSaved = networkResults.filter(r => r.saved).length;
+            // Lógica de salvar na rede (mantida como estava)
+            const networkResults = [];
+            try {
+                const networkPath = 'R:\\Publico\\felipec';
+                if (!fs.existsSync(networkPath)) {
+                    try {
+                        fs.mkdirSync(networkPath, { recursive: true });
+                    } catch (mkdirError) {
+                        logger.warn('⚠️ Não foi possível acessar/criar pasta de rede', { 
+                            path: networkPath,
+                            error: mkdirError.message 
+                        });
+                    }
+                }
+                for (const fileName of fileNames) {
+                    try {
+                        const filePath = xlsxGeneratorService.getFilePath(fileName);
+                        const destPath = path.join(networkPath, fileName);
+                        fs.copyFileSync(filePath, destPath);
+                        networkResults.push({ fileName, saved: true });
+                        logger.info('✅ Arquivo salvo na pasta de rede', { 
+                            origem: filePath,
+                            destino: destPath 
+                        });
+                    } catch (copyError) {
+                        networkResults.push({ fileName, saved: false, error: copyError.message });
+                        logger.error('❌ Erro ao salvar arquivo na rede', { 
+                            arquivo: fileName, 
+                            error: copyError.message 
+                        });
+                    }
+                }
+            } catch (networkError) {
+                logger.error('❌ Erro geral na pasta de rede', networkError);
+            }
 
-            return res.json({
-                success: true,
-                message: `Processamento concluído: ${emailsSent}/${results.length} emails enviados, ${filesNetworkSaved}/${fileNames.length} arquivos salvos em rede`,
-                data: {
-                    emailResults: results,
-                    networkResults: networkResults,
-                    grupo: grupo,
-                    enviarSeparado: enviarSeparado,
-                    processedAt: new Date().toISOString()
-                }
-            });
+            const emailsSent = results.filter(r => r.emailSent).length;
+            const filesNetworkSaved = networkResults.filter(r => r.saved).length;
 
-        } catch (error) {
-            logger.error('❌ Erro no processo de validação e envio duplo', {
-                error: error.message,
-                stack: error.stack
-            });
-            return res.status(500).json({
-                success: false,
-                error: 'Erro interno do servidor no processo de validação e envio duplo'
-            });
-        }
-    }
+            return res.json({
+                success: true,
+                message: `Processamento concluído: ${emailsSent}/${results.length} emails enviados, ${filesNetworkSaved}/${fileNames.length} arquivos salvos em rede`,
+                data: {
+                    emailResults: results,
+                    networkResults: networkResults,
+                    grupo: grupo,
+                    enviarSeparado: enviarSeparado,
+                    processedAt: new Date().toISOString()
+                }
+            });
+
+        } catch (error) {
+            logger.error('❌ Erro no processo de validação e envio duplo', {
+                error: error.message,
+                stack: error.stack
+            });
+            return res.status(500).json({
+                success: false,
+                error: 'Erro interno do servidor no processo de validação e envio duplo'
+            });
+        }
+    }
 
     // Validar e enviar planilha por email e salvar na pasta R:
     async validateAndSend(req, res) {

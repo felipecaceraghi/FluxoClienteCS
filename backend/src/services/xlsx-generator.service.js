@@ -435,7 +435,7 @@ class XlsxGeneratorService {
             // Insere a imagem na linha 3 - começando na coluna C
             this.worksheet.addImage(imageId, {
                 tl: { col: 2, row: 2 }, // Top-left: coluna C (2), linha 3 (índice 2) 
-                ext: { width: 1500, height: 55 }, // Dimensões perfeitas para logo largo
+                ext: { width: 500, height: 55 }, // Dimensões perfeitas para logo largo
                 editAs: 'oneCell'
             });
 
@@ -483,71 +483,101 @@ class XlsxGeneratorService {
     }
 
     addCompanyBasicInfo(companies) {
-        const chunks = this.chunkArray(companies, 3);
-        
-        chunks.forEach(chunk => {
-            const apelidoRow = ['', '', 'Apelido:'];
-            chunk.forEach(company => {
-                apelidoRow.push(this.truncateCompanyName(company.nome_fantasia));
-            });
-            while (apelidoRow.length < 9) apelidoRow.push('');
-            this.addDataRow(apelidoRow);
+        const chunks = this.chunkArray(companies, 3);
+        
+        chunks.forEach(chunk => {
+            const apelidoRow = ['', '', 'Apelido:'];
+            chunk.forEach(company => {
+                apelidoRow.push(this.truncateCompanyName(company.nome_fantasia));
+            });
+            while (apelidoRow.length < 9) apelidoRow.push('');
+            this.addDataRow(apelidoRow);
 
-            const codigoRow = ['', '', 'Código no sistema Domínio:'];
-            chunk.forEach(company => {
-                codigoRow.push(this.convertToNumber(company.codigo, ''));
-            });
-            while (codigoRow.length < 9) codigoRow.push('');
-            this.addDataRow(codigoRow);
+            const codigoRow = ['', '', 'Código no sistema Domínio:'];
+            chunk.forEach(company => {
+                codigoRow.push(this.convertToNumber(company.codigo, ''));
+            });
+            while (codigoRow.length < 9) codigoRow.push('');
+            this.addDataRow(codigoRow);
 
-            const razaoRow = ['', '', 'Razão Social:'];
-            chunk.forEach(company => {
-                razaoRow.push(company.razao_social || '');
-            });
-            while (razaoRow.length < 9) razaoRow.push('');
-            this.addDataRow(razaoRow);
+            const razaoRow = ['', '', 'Razão Social:'];
+            chunk.forEach(company => {
+                razaoRow.push(company.razao_social || '');
+            });
+            while (razaoRow.length < 9) razaoRow.push('');
+            this.addDataRow(razaoRow);
 
-            const cnpjRow = ['', '', 'CNPJ:'];
-            chunk.forEach(company => {
-                cnpjRow.push(company.cnpj || '');
-            });
-            while (cnpjRow.length < 9) cnpjRow.push('');
-            this.addDataRow(cnpjRow);
+            const cnpjRow = ['', '', 'CNPJ:'];
+            chunk.forEach(company => {
+                cnpjRow.push(company.cnpj || '');
+            });
+            while (cnpjRow.length < 9) cnpjRow.push('');
+            this.addDataRow(cnpjRow);
 
-            const vigenciaRow = ['', '', 'Vigência Inicial:'];
-            chunk.forEach(company => {
-                const dataInicio = company.inicio_contrato ? new Date(company.inicio_contrato) : new Date();
-                const mes = String(dataInicio.getMonth() + 1).padStart(2, '0');
-                const ano = dataInicio.getFullYear();
-                vigenciaRow.push(`${mes}/${ano}`);
-            });
-            while (vigenciaRow.length < 9) vigenciaRow.push('');
-            this.addDataRow(vigenciaRow);
+            // ==================================================================
+            // AQUI COMEÇA A LÓGICA ATUALIZADA PARA "VIGÊNCIA INICIAL"
+            // ==================================================================
+            const vigenciaRow = ['', '', 'Vigência Inicial:'];
+            chunk.forEach(company => {
+                let dataInicio;
+                const dateStringFromApi = company.inicio_contrato; // Ex: "2025-01-09"
 
-            const siteRow = ['', '', 'Site:'];
-            chunk.forEach(company => {
-                siteRow.push(company.link_do_site || '');
-            });
-            while (siteRow.length < 9) siteRow.push('');
-            this.addDataRow(siteRow);
+                if (dateStringFromApi) {
+                    // A API envia em YYYY-DD-MM. Corrigimos manualmente.
+                    const parts = dateStringFromApi.split('-'); // -> ['2025', '01', '09']
+                    const year = parts[0];
+                    const day = parts[1];
+                    const month = parts[2];
 
-            const planoRow = ['', '', 'Plano Contratado:'];
-            chunk.forEach(company => {
-                planoRow.push(company.plano_contratado || '');
-            });
-            while (planoRow.length < 9) planoRow.push('');
-            this.addDataRow(planoRow);
+                    // Remonta a data no formato que o JavaScript entende (YYYY-MM-DD)
+                    const correctedDateString = `${year}-${month}-${day}T00:00:00`; // -> "2025-09-01T00:00:00"
+                    dataInicio = new Date(correctedDateString);
+                } else {
+                    // Se não houver data, usa a data atual como padrão.
+                    dataInicio = new Date();
+                }
 
-            const slaRow = ['', '', 'SLA Para Retorno:'];
-            chunk.forEach(company => {
-                slaRow.push(company.sla || '');
-            });
-            while (slaRow.length < 9) slaRow.push('');
-            this.addDataRow(slaRow);
+                // Verifica se a data é válida antes de formatar
+                if (dataInicio && !isNaN(dataInicio)) {
+                    // NOVA FORMATAÇÃO: 'set/25'
+                    const meses = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+                    const mesAbreviado = meses[dataInicio.getMonth()];
+                    const anoCurto = String(dataInicio.getFullYear()).slice(-2);
+                    vigenciaRow.push(`${mesAbreviado}/${anoCurto}`);
+                } else {
+                    vigenciaRow.push(''); // Caso a data da API seja inválida
+                }
+            });
+            while (vigenciaRow.length < 9) vigenciaRow.push('');
+            this.addDataRow(vigenciaRow);
+            // ==================================================================
+            // FIM DA LÓGICA ATUALIZADA
+            // ==================================================================
 
-            this.addEmptyDataRow();
-        });
-    }
+            const siteRow = ['', '', 'Site:'];
+            chunk.forEach(company => {
+                siteRow.push(company.link_do_site || '');
+            });
+            while (siteRow.length < 9) siteRow.push('');
+            this.addDataRow(siteRow);
+
+            const planoRow = ['', '', 'Plano Contratado:'];
+            chunk.forEach(company => {
+                planoRow.push(company.plano_contratado || '');
+            });
+            while (planoRow.length < 9) planoRow.push('');
+            this.addDataRow(planoRow);
+
+            const slaRow = ['', '', 'SLA Para Retorno:'];
+            chunk.forEach(company => {
+                slaRow.push(company.sla || '');
+            });
+            while (slaRow.length < 9) slaRow.push('');
+            this.addDataRow(slaRow);
+
+            this.addEmptyDataRow();
+        });
+    }
 
     addContractedServices(companies) {
         this.addDataRow(['', '', 'Serviços Contratados', '', '', '', '', '', '']);
@@ -733,13 +763,60 @@ class XlsxGeneratorService {
     }
 
     addSystemsInfo(companies) {
-        const firstCompany = companies[0];
+    // Passo 1: Coletar os valores de TODAS as empresas para os TRÊS campos.
+    const contabeis = [...new Set(companies.map(c => c.sistema_contabil).filter(Boolean))];
+    const folhas = [...new Set(companies.map(c => c.sistema_folha).filter(Boolean))];
+    const fiscais = [...new Set(companies.map(c => c.sistema_fiscal).filter(Boolean))];
+
+    // Junta todos os sistemas encontrados em um único array para análise.
+    const todosOsSistemas = [...contabeis, ...folhas, ...fiscais];
+
+    // Passo 2: Descobrir quantos sistemas ÚNICOS existem no total.
+    const sistemasUnicosNoGeral = [...new Set(todosOsSistemas)];
+
+    this.addEmptyDataRow();
+    this.addDataRow(['', '', 'Sistemas', '', '', '', '', '', '']);
+
+    // Passo 3: Lógica de decisão
+    // SE só existe 1 sistema único para todas as áreas (Contábil, Folha, Fiscal)...
+    if (sistemasUnicosNoGeral.length === 1) {
+        // ...então consolidamos a exibição.
+        const nomeDoSistema = sistemasUnicosNoGeral[0];
+        const labels = [];
+
+        if (contabeis.length > 0) labels.push('Contábil');
+        if (folhas.length > 0) labels.push('Folha');
+        if (fiscais.length > 0) labels.push('Fiscal');
         
-        this.addEmptyDataRow();
-        this.addDataRow(['', '', 'Sistemas', '', '', '', '', '', '']);
-        this.addDataRow(['', '', 'Contábil e Fiscal:', firstCompany.sistema_contabil || '', '', '', '', '', '']);
-        this.addEmptyDataRow();
+        // Formata o label de forma inteligente (ex: "Contábil e Fiscal" ou "Contábil, Folha e Fiscal")
+        let finalLabel = '';
+        if (labels.length > 1) {
+            finalLabel = labels.slice(0, -1).join(', ') + ' e ' + labels.slice(-1);
+        } else {
+            finalLabel = labels.join('');
+        }
+
+        this.addDataRow(['', '', `${finalLabel}:`, nomeDoSistema, '', '', '', '', '']);
+
+    } else {
+        // SE os sistemas são diferentes (ou não há nenhum), mostramos em linhas separadas.
+        const textoContabil = contabeis.join(', ');
+        const textoFolha = folhas.join(', ');
+        const textoFiscal = fiscais.join(', ');
+
+        if (textoContabil) {
+            this.addDataRow(['', '', 'Contábil:', textoContabil, '', '', '', '', '']);
+        }
+        if (textoFolha) {
+            this.addDataRow(['', '', 'Folha de Pagamento:', textoFolha, '', '', '', '', '']);
+        }
+        if (textoFiscal) {
+            this.addDataRow(['', '', 'Fiscal:', textoFiscal, '', '', '', '', '']);
+        }
     }
+
+    this.addEmptyDataRow();
+}
 
     addAccountingInfo(companies) {
         const chunks = this.chunkArray(companies, 3);
@@ -755,12 +832,21 @@ class XlsxGeneratorService {
             const deadlineRow = ['', '', 'Deadline:'];
             chunk.forEach(company => {
                 // Monta deadline dinâmico baseado nos campos da API
-                let deadline = '';
-                if (company.deadline_periodicidade) {
-                    deadline = `${company.deadline_util_corrente || ''}, dia ${company.deadline_periodicidade}`;
-                } else {
-                    deadline = ''; // Sem fallback
+                // Monta deadline dinâmico baseado nos campos da API
+                const deadlineParts = [];
+
+                if (company.deadline_util_corrente) {
+                    deadlineParts.push(company.deadline_util_corrente);
                 }
+                if (company.deadline_periodicidade) {
+                    deadlineParts.push(company.deadline_periodicidade);
+                }
+                if (company.deadline_dia) {
+                    deadlineParts.push(`Dia ${company.deadline_dia}`);
+                }
+
+                // Junta as partes que existem com ", "
+                const deadline = deadlineParts.join(', '); 
                 deadlineRow.push(deadline);
             });
             while (deadlineRow.length < 9) deadlineRow.push('');

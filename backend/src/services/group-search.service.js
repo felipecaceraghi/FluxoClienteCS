@@ -8,90 +8,100 @@ class GroupSearchService {
     }
 
     async searchByGroup(groupName) {
-        if (this.isSearching) {
-            logger.warn('Busca por grupo já está em execução, aguarde...');
-            throw new Error('Busca por grupo já está em execução, tente novamente em alguns segundos');
-        }
+        if (this.isSearching) {
+            logger.warn('Busca por grupo já está em execução, aguarde...');
+            throw new Error('Busca por grupo já está em execução, tente novamente em alguns segundos');
+        }
 
-        this.isSearching = true;
-        const startTime = new Date();
-        
-        try {
-            logger.info('=== Iniciando busca por grupo ===', { grupo: groupName });
-            
-            // 1. Baixar arquivo mais recente do SharePoint
-            logger.info('Baixando arquivo do SharePoint...');
-            const downloadResult = await sharepointService.downloadFile();
-            
-            if (!downloadResult.success) {
-                throw new Error(`Erro ao baixar arquivo: ${downloadResult.message}`);
-            }
+        this.isSearching = true;
+        const startTime = new Date();
+        
+        try {
+            logger.info('=== Iniciando busca por grupo ===', { grupo: groupName });
+            
+            // 1. Baixar arquivo mais recente do SharePoint
+            logger.info('Baixando arquivo do SharePoint...');
+            const downloadResult = await sharepointService.downloadFile();
+            
+            if (!downloadResult.success) {
+                throw new Error(`Erro ao baixar arquivo: ${downloadResult.message}`);
+            }
 
-            logger.info('Arquivo baixado com sucesso', { 
-                fileName: downloadResult.fileName,
-                size: downloadResult.fileSize 
-            });
+            logger.info('Arquivo baixado com sucesso', { 
+                fileName: downloadResult.fileName,
+                size: downloadResult.fileSize 
+            });
 
-            // 2. Processar dados completos do Excel
-            logger.info('Processando dados completos da planilha...');
-            const allCompanies = await excelService.parseFullCompanyData(downloadResult.filePath);
-            
-            // 3. Filtrar por grupo (case-insensitive)
-            const groupNameLower = groupName.toLowerCase().trim();
-            const filteredCompanies = allCompanies.filter(company => {
-                const companyGroup = company.grupo ? company.grupo.toLowerCase().trim() : '';
-                return companyGroup.includes(groupNameLower);
-            });
+            // 2. Processar dados completos do Excel
+            logger.info('Processando dados completos da planilha...');
+            const allCompanies = await excelService.parseFullCompanyData(downloadResult.filePath);
+            
+            // 3. Filtrar primeiro por grupo (case-insensitive)
+            const searchTermLower = groupName.toLowerCase().trim();
+            let filteredCompanies = allCompanies.filter(company => {
+                const companyGroup = company.grupo ? company.grupo.toLowerCase().trim() : '';
+                return companyGroup.includes(searchTermLower);
+            });
 
-            // 4. Compilar resultado
-            const endTime = new Date();
-            const duration = endTime - startTime;
-            
-            const result = {
-                success: true,
-                searchCriteria: {
-                    grupo: groupName,
-                    busca_case_insensitive: true
-                },
-                summary: {
-                    total_empresas_planilha: allCompanies.length,
-                    empresas_encontradas: filteredCompanies.length,
-                    arquivo_origem: downloadResult.fileName,
-                    data_busca: endTime.toISOString(),
-                    tempo_processamento: `${Math.round(duration / 1000)}s`
-                },
-                empresas: filteredCompanies
-            };
+            // 4. LÓGICA DE FALLBACK: Se não encontrar por grupo, procurar no campo 'cliente'
+            if (filteredCompanies.length === 0) {
+                logger.info(`Nenhum resultado para "${groupName}" no campo 'grupo'. Buscando no campo 'cliente'...`);
+                filteredCompanies = allCompanies.filter(company => {
+                    // Assumindo que o nome do campo na planilha é 'cliente'
+                    const companyClient = company.nome_fantasia ? company.nome_fantasia.toLowerCase().trim() : '';
+                    return companyClient.includes(searchTermLower);
+                });
+            }
 
-            // 5. Log do resultado
-            logger.info('=== Busca por grupo concluída ===', {
-                grupo: groupName,
-                totalEncontradas: filteredCompanies.length,
-                totalPlanilha: allCompanies.length,
-                duracao: `${Math.round(duration / 1000)}s`
-            });
+            // 5. Compilar resultado
+            const endTime = new Date();
+            const duration = endTime - startTime;
+            
+            const result = {
+                success: true,
+                searchCriteria: {
+                    termo_buscado: groupName,
+                    busca_case_insensitive: true
+                },
+                summary: {
+                    total_empresas_planilha: allCompanies.length,
+                    empresas_encontradas: filteredCompanies.length,
+                    arquivo_origem: downloadResult.fileName,
+                    data_busca: endTime.toISOString(),
+                    tempo_processamento: `${Math.round(duration / 1000)}s`
+                },
+                empresas: filteredCompanies
+            };
 
-            return result;
+            // 6. Log do resultado
+            logger.info('=== Busca por grupo concluída ===', {
+                grupo: groupName,
+                totalEncontradas: filteredCompanies.length,
+                totalPlanilha: allCompanies.length,
+                duracao: `${Math.round(duration / 1000)}s`
+            });
 
-        } catch (error) {
-            logger.error('Erro durante busca por grupo:', error);
-            
-            return {
-                success: false,
-                error: error.message,
-                searchCriteria: {
-                    grupo: groupName
-                },
-                summary: {
-                    empresas_encontradas: 0,
-                    data_busca: new Date().toISOString()
-                },
-                empresas: []
-            };
-        } finally {
-            this.isSearching = false;
-        }
-    }
+            return result;
+
+        } catch (error) {
+            logger.error('Erro durante busca por grupo:', error);
+            
+            return {
+                success: false,
+                error: error.message,
+                searchCriteria: {
+                    grupo: groupName
+                },
+                summary: {
+                    empresas_encontradas: 0,
+                    data_busca: new Date().toISOString()
+                },
+                empresas: []
+            };
+        } finally {
+            this.isSearching = false;
+        }
+    }
 
     // Método para obter todos os grupos únicos disponíveis
     async getAvailableGroups() {

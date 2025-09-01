@@ -126,9 +126,72 @@ router.use(authMiddleware);
 // GET /api/xlsx-generator/stats
 router.get('/stats', xlsxGeneratorController.getStats);
 
-// Testar APENAS conversão Python
-// POST /api/xlsx-generator/test-python
-router.post('/test-python', xlsxGeneratorController.testPythonOnly);
+// Testar envio de email com Python
+// POST /api/xlsx-generator/test-python-email
+router.post('/test-python-email', async (req, res) => {
+    try {
+        const { fileName, to = 'felipe.caceraghi@gofurthergroup.com.br', subject, grupo } = req.body;
+        
+        if (!fileName) {
+            return res.status(400).json({
+                success: false,
+                error: 'fileName é obrigatório'
+            });
+        }
+
+        const xlsxGeneratorService = require('../services/xlsx-generator.service');
+        const emailService = require('../services/email.service');
+        
+        // Verificar se arquivo existe
+        if (!xlsxGeneratorService.fileExists(fileName)) {
+            return res.status(404).json({
+                success: false,
+                error: 'Arquivo não encontrado'
+            });
+        }
+
+        const excelFilePath = xlsxGeneratorService.getFilePath(fileName);
+        const emailSubject = subject || `Teste Python - ${fileName}`;
+        const grupoName = grupo || 'Teste';
+
+        console.log('🧪 TESTANDO ENVIO COM PYTHON', {
+            arquivo: fileName,
+            para: to,
+            assunto: emailSubject,
+            grupo: grupoName
+        });
+
+        // Usar o método que chama o script Python
+        await emailService.sendFileAsImageEmail({
+            to: to,
+            subject: emailSubject,
+            grupo: grupoName,
+            excelFilePath: excelFilePath
+        });
+
+        console.log('✅ EMAIL ENVIADO COM PYTHON COM SUCESSO');
+
+        return res.json({
+            success: true,
+            message: 'Email enviado com sucesso usando Python!',
+            data: {
+                fileName: fileName,
+                sentTo: to,
+                subject: emailSubject,
+                method: 'Python Script',
+                sentAt: new Date().toISOString()
+            }
+        });
+
+    } catch (error) {
+        console.error('❌ ERRO NO TESTE PYTHON EMAIL:', error);
+        return res.status(500).json({
+            success: false,
+            error: 'Erro ao testar envio com Python',
+            details: error.message
+        });
+    }
+});
 
 // Testar conversão para imagem e salvar arquivo
 // POST /api/xlsx-generator/test-image-file

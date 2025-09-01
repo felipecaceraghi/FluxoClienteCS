@@ -217,7 +217,7 @@ export default function UserDashboard({ initialMode }) {
 
   // Função para validar se a seleção é válida
   const isValidSelection = () => {
-    if (selectedItem && selectedItem.type === 'grupo') return true;
+    if (selectedItem && selectedItem.type ) return true;
     return !!availableGroups.find(group => group.toLowerCase() === searchTerm.trim().toLowerCase());
   };
 

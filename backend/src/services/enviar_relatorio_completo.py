@@ -9,23 +9,28 @@ import os
 import re
 import base64
 import traceback
+import dotenv
 
+dotenv.load_dotenv()  # Carrega variáveis de ambiente do arquivo .env
 # É necessário instalar as bibliotecas:
 # pip install beautifulsoup4 pywin32 xlwings requests
 from bs4 import BeautifulSoup
 import win32clipboard
-
 # Configurar encoding UTF-8 para garantir a compatibilidade de caracteres
 sys.stdout.reconfigure(encoding='utf-8')
 sys.stderr.reconfigure(encoding='utf-8')
 
+
+
+
+
 # Configurações do Microsoft Graph
 CONFIG = {
-    "client_id": "de286ff7-cc71-4a79-90c3-c04b61e3b948",
-    "client_secret": os.getenv('AZURE_CLIENT_SECRET', 'YOUR_CLIENT_SECRET_HERE'),
-    "tenant_id": "520c4df2-db46-4fdd-b833-6a96df9215bf",
-    "sender_email": "notificacaogf@gofurthergroup.com.br",
-    "token_url": "https://login.microsoftonline.com/520c4df2-db46-4fdd-b833-6a96df9215bf/oauth2/v2.0/token",
+    "client_id": os.getenv("GRAPH_CLIENT_ID"),
+    "client_secret": os.getenv("GRAPH_CLIENT_SECRET"),
+    "tenant_id": os.getenv("GRAPH_TENANT_ID"),
+    "sender_email": os.getenv("EMAIL_SENDER"),
+    "token_url": f"https://login.microsoftonline.com/{os.getenv('GRAPH_TENANT_ID')}/oauth2/v2.0/token",
     "graph_url": "https://graph.microsoft.com/v1.0"
 }
 
