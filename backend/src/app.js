@@ -118,7 +118,7 @@ app.use('*', (req, res) => {
 app.use(errorHandler);
 
 // Inicializar servidor
-const server = app.listen(PORT, () => {
+const server = app.listen(PORT,'0.0.0.0',() => {
     console.log('🚀 Servidor iniciado!');
     console.log(`📍 Ambiente: ${process.env.NODE_ENV}`);
     console.log(`🌐 Porta: ${PORT}`);

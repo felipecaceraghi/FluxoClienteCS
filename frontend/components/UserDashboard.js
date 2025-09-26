@@ -13,6 +13,7 @@ export default function UserDashboard({ initialMode }) {
   const [autocompleteResults, setAutocompleteResults] = useState([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
+  const [selectedClients, setSelectedClients] = useState([]); // Novo: array para múltiplos clientes
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [spreadsheetFiles, setSpreadsheetFiles] = useState(null);
@@ -101,34 +102,26 @@ export default function UserDashboard({ initialMode }) {
     }
   };
 
-  // Função para buscar grupos disponíveis (fallback)
-  const fetchAvailableGroups = async () => {
-    if (availableGroups.length > 0) return;
-
-    try {
-      setLoading(true);
-      const token = localStorage.getItem('fluxoclientecs_token');
-
-      const response = await axios.get(`${API_BASE_URL}/api/group-search/groups`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'bypass-tunnel-reminder': 'true',
-          'User-Agent': 'FluxoClienteCS/1.0'
-        }
-      });
-
-      if (response.data.success) {
-        setAvailableGroups(response.data.grupos || []);
-      } else {
-        throw new Error(response.data.error || 'Erro ao carregar grupos');
-      }
-    } catch (error) {
-      console.error('Erro ao buscar grupos:', error);
-      toast.error('Erro ao carregar grupos disponíveis');
-      setAvailableGroups([]);
-    } finally {
-      setLoading(false);
+  // Função para adicionar cliente à seleção múltipla
+  const addClientToSelection = (client) => {
+    if (!selectedClients.find(c => c.value === client.value)) {
+      setSelectedClients(prev => [...prev, client]);
+      setSearchTerm('');
+      setSelectedItem(null);
+      setShowDropdown(false);
     }
+  };
+
+  // Função para remover cliente da seleção
+  const removeClientFromSelection = (clientValue) => {
+    setSelectedClients(prev => prev.filter(c => c.value !== clientValue));
+  };
+
+  // Função para limpar toda seleção
+  const clearSelection = () => {
+    setSelectedClients([]);
+    setSelectedItem(null);
+    setSearchTerm('');
   };
 
   // Single set of input handlers and actions (removed duplicate definitions)
@@ -136,11 +129,8 @@ export default function UserDashboard({ initialMode }) {
     // Previne qualquer busca durante a seleção
     isSelectingRef.current = true;
 
-    // Define os valores diretamente
-    setSelectedItem(item);
-    setSearchTerm(item.value);
-    setShowDropdown(false);
-    setAutocompleteResults([]);
+    // Adiciona à seleção múltipla em vez de definir um único item
+    addClientToSelection(item);
 
     // Libera o controle após um breve delay
     setTimeout(() => {
@@ -197,14 +187,34 @@ export default function UserDashboard({ initialMode }) {
       const token = localStorage.getItem('fluxoclientecs_token');
       const fileNames = spreadsheetFiles.planilhas.map(p => p.fileName);
 
-      const response = await axios.post(`${API_BASE_URL}/api/xlsx-generator/validate-and-send-dual`, { fileNames, grupo: spreadsheetFiles.grupo, approved: true, enviarSeparado: true }, {
+      // Determinar o endpoint baseado no tipo de geração
+      const endpoint = spreadsheetFiles.isMultiSelection 
+        ? '/api/xlsx-generator/validate-and-send-multi'
+        : '/api/xlsx-generator/validate-and-send-dual';
+
+      const requestBody = spreadsheetFiles.isMultiSelection
+        ? { 
+            fileNames, 
+            selectedClients: spreadsheetFiles.selectedClients,
+            approved: true, 
+            enviarSeparado: true 
+          }
+        : { 
+            fileNames, 
+            grupo: spreadsheetFiles.grupo, 
+            approved: true, 
+            enviarSeparado: true 
+          };
+
+      const response = await axios.post(`${API_BASE_URL}${endpoint}`, requestBody, {
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'bypass-tunnel-reminder': 'true', 'User-Agent': 'FluxoClienteCS/1.0' }
       });
 
       if (response.data.success) {
         const emailResults = response.data.data.emailResults;
         const sucessos = emailResults.filter(r => r.emailSent).length;
-        toast.success(`${sucessos}/${emailResults.length} planilhas enviadas separadamente!`);
+        const tipoSelecao = spreadsheetFiles.isMultiSelection ? 'empresas selecionadas' : 'grupo';
+        toast.success(`${sucessos}/${emailResults.length} planilhas enviadas separadamente para ${tipoSelecao}!`);
         setSpreadsheetFiles(null);
       } else {
         throw new Error(response.data.error || 'Erro ao enviar planilhas');
@@ -217,55 +227,183 @@ export default function UserDashboard({ initialMode }) {
 
   // Função para validar se a seleção é válida
   const isValidSelection = () => {
-    if (selectedItem && selectedItem.type ) return true;
+    // Se há múltiplos clientes selecionados, é válido
+    if (selectedClients.length > 0) return true;
+    
+    // Caso contrário, verifica seleção única (compatibilidade)
+    if (selectedItem && selectedItem.type) return true;
     return !!availableGroups.find(group => group.toLowerCase() === searchTerm.trim().toLowerCase());
   };
 
   const getSelectedValue = () => selectedItem ? selectedItem.value : searchTerm.trim();
 
   const generateReport = async () => {
-    if (!isValidSelection()) { toast.error('Selecione um grupo válido ou empresa para gerar as planilhas'); return; }
-    const searchValue = getSelectedValue();
-
+    if (!isValidSelection()) { toast.error('Selecione um grupo válido, empresa ou múltiplas empresas para gerar as planilhas'); return; }
+    
+    // Verifica se é seleção múltipla
+    const isMultiSelection = selectedClients.length > 0;
+    
     try {
       setGenerating(true);
       const token = localStorage.getItem('fluxoclientecs_token');
 
-      if (mode === 'entrada') {
-        const requestBody = { grupo: searchValue, tiposPlanilha: ['entrada', 'cobranca'], enviarSeparado: true, emailDestinatario: 'felipe.caceraghi@gofurthergroup.com.br' };
-        const generateResponse = await axios.post(`${API_BASE_URL}/api/xlsx-generator/generate-dual`, requestBody, { headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'bypass-tunnel-reminder': 'true', 'User-Agent': 'FluxoClienteCS/1.0' } });
-        if (!generateResponse.data.success) throw new Error(generateResponse.data.error || 'Erro ao gerar planilhas');
-        const planilhas = generateResponse.data.data.planilhas || [];
-        for (const planilha of planilhas) {
-          const downloadResponse = await axios.get(`${API_BASE_URL}/api/xlsx-generator/download/${planilha.fileName}`, { headers: { 'Authorization': `Bearer ${token}`, 'bypass-tunnel-reminder': 'true', 'User-Agent': 'FluxoClienteCS/1.0' }, responseType: 'blob' });
-          const blob = new Blob([downloadResponse.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-          const url = window.URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = planilha.fileName; document.body.appendChild(link); link.click(); document.body.removeChild(link); window.URL.revokeObjectURL(url);
+      if (isMultiSelection) {
+        // Geração para múltiplos clientes
+        const clientCodes = selectedClients.map(client => client.codigo);
+        
+        if (mode === 'entrada') {
+          // Para múltiplos clientes, usar endpoint de múltiplos
+          const requestBody = { 
+            clientCodes, 
+            tiposPlanilha: ['entrada', 'cobranca'], 
+            enviarSeparado: true, 
+            emailDestinatario: 'felipe.caceraghi@gofurthergroup.com.br' 
+          };
+          const generateResponse = await axios.post(`${API_BASE_URL}/api/xlsx-generator/generate-multi-entrada`, requestBody, { 
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'bypass-tunnel-reminder': 'true', 'User-Agent': 'FluxoClienteCS/1.0' } 
+          });
+          if (!generateResponse.data.success) throw new Error(generateResponse.data.error || 'Erro ao gerar planilhas múltiplas de entrada');
+          
+          const planilhas = generateResponse.data.data.planilhas || [];
+          for (const planilha of planilhas) {
+            const downloadResponse = await axios.get(`${API_BASE_URL}/api/xlsx-generator/download/${planilha.fileName}`, { 
+              headers: { 'Authorization': `Bearer ${token}`, 'bypass-tunnel-reminder': 'true', 'User-Agent': 'FluxoClienteCS/1.0' }, 
+              responseType: 'blob' 
+            });
+            const blob = new Blob([downloadResponse.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            const url = window.URL.createObjectURL(blob); 
+            const link = document.createElement('a'); 
+            link.href = url; 
+            link.download = planilha.fileName; 
+            document.body.appendChild(link); 
+            link.click(); 
+            document.body.removeChild(link); 
+            window.URL.revokeObjectURL(url);
+          }
+          
+          setSpreadsheetFiles({ 
+            ...generateResponse.data.data, 
+            geradoEm: generateResponse.data.data.geradoEm || new Date().toISOString(),
+            isMultiSelection: true,
+            selectedClients: selectedClients
+          });
+          
+          const tiposNomes = (generateResponse.data.data.planilhas || []).map(p => p.tipo === 'entrada' ? 'Entrada' : 'Honorários').join(' e ');
+          toast.success(`Planilhas de ${tiposNomes} baixadas para ${selectedClients.length} empresas selecionadas! Verifique sua pasta de Downloads.`);
+          clearSelection();
+        } else {
+          // Saída múltipla
+          const generateResponse = await axios.post(`${API_BASE_URL}/api/xlsx-saida/multi-clients`, { clientCodes }, { 
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'bypass-tunnel-reminder': 'true', 'User-Agent': 'FluxoClienteCS/1.0' } 
+          });
+          if (!generateResponse.data.success) throw new Error(generateResponse.data.error || 'Erro ao gerar planilhas múltiplas de saída');
+          
+          const data = generateResponse.data.data; 
+          const planilhas = data.planilhas || [];
+          for (const planilha of planilhas) {
+            const downloadResponse = await axios.get(`${API_BASE_URL}/api/xlsx-generator/download/${planilha.fileName}`, { 
+              headers: { 'Authorization': `Bearer ${token}`, 'bypass-tunnel-reminder': 'true', 'User-Agent': 'FluxoClienteCS/1.0' }, 
+              responseType: 'blob' 
+            });
+            const blob = new Blob([downloadResponse.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            const url = window.URL.createObjectURL(blob); 
+            const link = document.createElement('a'); 
+            link.href = url; 
+            link.download = planilha.fileName; 
+            document.body.appendChild(link); 
+            link.click(); 
+            document.body.removeChild(link); 
+            window.URL.revokeObjectURL(url);
+          }
+          
+          setSpreadsheetFiles({ 
+            planilhas: planilhas.map(p => ({ fileName: p.fileName, tipo: p.tipo })), 
+            grupo: `Múltiplas Empresas (${selectedClients.length})`, 
+            empresas: selectedClients.length, 
+            geradoEm: new Date().toISOString(),
+            isMultiSelection: true,
+            selectedClients: selectedClients
+          });
+          
+          toast.success(`Planilhas de Saída baixadas para ${selectedClients.length} empresas selecionadas! Verifique sua pasta de Downloads.`);
+          clearSelection();
         }
-        setSpreadsheetFiles({ ...generateResponse.data.data, geradoEm: generateResponse.data.data.geradoEm || new Date().toISOString() });
-        const tiposNomes = (generateResponse.data.data.planilhas || []).map(p => p.tipo === 'entrada' ? 'Entrada' : 'Honorários').join(' e ');
-        const itemType = selectedItem?.type === 'nome' ? 'empresa' : 'grupo';
-        toast.success(`Planilhas de ${tiposNomes} baixadas para ${itemType} ${searchValue} - ${generateResponse.data.data.empresas} empresas! Verifique sua pasta de Downloads.`);
-        setSearchTerm(''); setSelectedItem(null);
-
       } else {
-        // Saída
-        const generateResponse = await axios.post(`${API_BASE_URL}/api/xlsx-saida/grupo`, { grupo: searchValue }, { headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'bypass-tunnel-reminder': 'true', 'User-Agent': 'FluxoClienteCS/1.0' } });
-        if (!generateResponse.data.success) throw new Error(generateResponse.data.error || 'Erro ao gerar planilhas de saída');
-        const data = generateResponse.data.data; const planilhas = data.planilhas || [];
-        for (const planilha of planilhas) {
-          const downloadResponse = await axios.get(`${API_BASE_URL}/api/xlsx-generator/download/${planilha.fileName}`, { headers: { 'Authorization': `Bearer ${token}`, 'bypass-tunnel-reminder': 'true', 'User-Agent': 'FluxoClienteCS/1.0' }, responseType: 'blob' });
-          const blob = new Blob([downloadResponse.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-          const url = window.URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = planilha.fileName; document.body.appendChild(link); link.click(); document.body.removeChild(link); window.URL.revokeObjectURL(url);
+        // Lógica existente para seleção única
+        const searchValue = getSelectedValue();
+        const isEmpresaIndividual = selectedItem?.type === 'nome';
+
+        if (mode === 'entrada') {
+          if (isEmpresaIndividual) {
+            // Para empresa individual, usar endpoint específico
+            const generateResponse = await axios.get(`${API_BASE_URL}/api/xlsx-generator/generate-entrada-cliente/${selectedItem.codigo}`, { headers: { 'Authorization': `Bearer ${token}`, 'bypass-tunnel-reminder': 'true', 'User-Agent': 'FluxoClienteCS/1.0' } });
+            if (!generateResponse.data.success) throw new Error(generateResponse.data.error || 'Erro ao gerar planilha de entrada');
+            const planilha = generateResponse.data.data;
+            const downloadResponse = await axios.get(`${API_BASE_URL}/api/xlsx-generator/download/${planilha.fileName}`, { headers: { 'Authorization': `Bearer ${token}`, 'bypass-tunnel-reminder': 'true', 'User-Agent': 'FluxoClienteCS/1.0' }, responseType: 'blob' });
+            const blob = new Blob([downloadResponse.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            const url = window.URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = planilha.fileName; document.body.appendChild(link); link.click(); document.body.removeChild(link); window.URL.revokeObjectURL(url);
+            setSpreadsheetFiles({ planilhas: [{ fileName: planilha.fileName, tipo: 'entrada' }], grupo: searchValue, empresas: 1, geradoEm: new Date().toISOString() });
+            toast.success(`Planilha de Entrada baixada para empresa ${searchValue}. Verifique sua pasta de Downloads.`);
+            setSearchTerm(''); setSelectedItem(null);
+          } else {
+            // Para grupo, manter comportamento atual
+            const requestBody = { grupo: searchValue, tiposPlanilha: ['entrada', 'cobranca'], enviarSeparado: true, emailDestinatario: 'felipe.caceraghi@gofurthergroup.com.br' };
+            const generateResponse = await axios.post(`${API_BASE_URL}/api/xlsx-generator/generate-dual`, requestBody, { headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'bypass-tunnel-reminder': 'true', 'User-Agent': 'FluxoClienteCS/1.0' } });
+            if (!generateResponse.data.success) throw new Error(generateResponse.data.error || 'Erro ao gerar planilhas');
+            const planilhas = generateResponse.data.data.planilhas || [];
+            for (const planilha of planilhas) {
+              const downloadResponse = await axios.get(`${API_BASE_URL}/api/xlsx-generator/download/${planilha.fileName}`, { headers: { 'Authorization': `Bearer ${token}`, 'bypass-tunnel-reminder': 'true', 'User-Agent': 'FluxoClienteCS/1.0' }, responseType: 'blob' });
+              const blob = new Blob([downloadResponse.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+              const url = window.URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = planilha.fileName; document.body.appendChild(link); link.click(); document.body.removeChild(link); window.URL.revokeObjectURL(url);
+            }
+            setSpreadsheetFiles({ ...generateResponse.data.data, geradoEm: generateResponse.data.data.geradoEm || new Date().toISOString() });
+            const tiposNomes = (generateResponse.data.data.planilhas || []).map(p => p.tipo === 'entrada' ? 'Entrada' : 'Honorários').join(' e ');
+            const itemType = selectedItem?.type === 'nome' ? 'empresa' : 'grupo';
+            toast.success(`Planilhas de ${tiposNomes} baixadas para ${itemType} ${searchValue} - ${generateResponse.data.data.empresas} empresas! Verifique sua pasta de Downloads.`);
+            setSearchTerm(''); setSelectedItem(null);
+          }
+
+        } else {
+          // Saída
+          if (isEmpresaIndividual) {
+            // Para empresa individual, usar endpoint específico
+            const generateResponse = await axios.get(`${API_BASE_URL}/api/xlsx-generator/generate-saida-cliente/${selectedItem.codigo}`, { headers: { 'Authorization': `Bearer ${token}`, 'bypass-tunnel-reminder': 'true', 'User-Agent': 'FluxoClienteCS/1.0' } });
+            if (!generateResponse.data.success) throw new Error(generateResponse.data.error || 'Erro ao gerar planilha de saída');
+            const planilha = generateResponse.data.data;
+            const downloadResponse = await axios.get(`${API_BASE_URL}/api/xlsx-generator/download/${planilha.fileName}`, { headers: { 'Authorization': `Bearer ${token}`, 'bypass-tunnel-reminder': 'true', 'User-Agent': 'FluxoClienteCS/1.0' }, responseType: 'blob' });
+            const blob = new Blob([downloadResponse.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            const url = window.URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = planilha.fileName; document.body.appendChild(link); link.click(); document.body.removeChild(link); window.URL.revokeObjectURL(url);
+            setSpreadsheetFiles({ planilhas: [{ fileName: planilha.fileName, tipo: 'saida' }], grupo: searchValue, empresas: 1, geradoEm: new Date().toISOString() });
+            toast.success(`Planilha de Saída baixada para empresa ${searchValue}. Verifique sua pasta de Downloads.`);
+            setSearchTerm(''); setSelectedItem(null);
+          } else {
+            // Para grupo, manter comportamento atual
+            const generateResponse = await axios.post(`${API_BASE_URL}/api/xlsx-saida/grupo`, { grupo: searchValue }, { headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'bypass-tunnel-reminder': 'true', 'User-Agent': 'FluxoClienteCS/1.0' } });
+            if (!generateResponse.data.success) throw new Error(generateResponse.data.error || 'Erro ao gerar planilhas de saída');
+            const data = generateResponse.data.data; const planilhas = data.planilhas || [];
+            for (const planilha of planilhas) {
+              const downloadResponse = await axios.get(`${API_BASE_URL}/api/xlsx-generator/download/${planilha.fileName}`, { headers: { 'Authorization': `Bearer ${token}`, 'bypass-tunnel-reminder': 'true', 'User-Agent': 'FluxoClienteCS/1.0' }, responseType: 'blob' });
+              const blob = new Blob([downloadResponse.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+              const url = window.URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = planilha.fileName; document.body.appendChild(link); link.click(); document.body.removeChild(link); window.URL.revokeObjectURL(url);
+            }
+            setSpreadsheetFiles({ planilhas: planilhas.map(p => ({ fileName: p.fileName, tipo: p.tipo })), grupo: searchValue, empresas: data.empresas || 0, geradoEm: new Date().toISOString() });
+            toast.success(`Planilhas de Saída baixadas para grupo ${searchValue}. Verifique sua pasta de Downloads.`);
+            setSearchTerm(''); setSelectedItem(null);
+          }
         }
-        setSpreadsheetFiles({ planilhas: planilhas.map(p => ({ fileName: p.fileName, tipo: p.tipo })), grupo: searchValue, empresas: data.empresas || 0, geradoEm: new Date().toISOString() });
-        toast.success(`Planilhas de Saída baixadas para grupo ${searchValue}. Verifique sua pasta de Downloads.`);
-        setSearchTerm(''); setSelectedItem(null);
       }
 
     } catch (error) {
       console.error('Erro ao gerar relatório:', error);
-      if (error.response?.status === 404) toast.error(`${selectedItem?.type === 'nome' ? 'Empresa' : 'Grupo'} "${searchValue}" não encontrado`);
-      else if (error.response?.status === 400) { const errorMsg = error.response?.data?.error || 'Dados inválidos para a seleção'; toast.error(`${errorMsg} (${selectedItem?.type === 'nome' ? 'Empresa' : 'Grupo'}: "${searchValue}")`); }
+      if (error.response?.status === 404) {
+        const searchValue = selectedClients.length > 0 ? `${selectedClients.length} empresas` : (selectedItem?.type === 'nome' ? 'Empresa' : 'Grupo') + ` "${getSelectedValue()}"`;
+        toast.error(`${searchValue} não encontrado`);
+      }
+      else if (error.response?.status === 400) { 
+        const errorMsg = error.response?.data?.error || 'Dados inválidos para a seleção'; 
+        const searchValue = selectedClients.length > 0 ? `${selectedClients.length} empresas` : (selectedItem?.type === 'nome' ? 'Empresa' : 'Grupo') + ` "${getSelectedValue()}"`;
+        toast.error(`${errorMsg} (${searchValue})`); 
+      }
       else toast.error('Erro ao gerar planilhas');
     } finally { setGenerating(false); }
   };
@@ -280,7 +418,7 @@ export default function UserDashboard({ initialMode }) {
             Gerar Planilhas
           </h2>
           <p className="text-gray-600">
-            Pesquise por <strong>grupo</strong> ou <strong>nome da empresa</strong> para gerar as planilhas de entrada e honorários
+            Pesquise por <strong>grupo</strong>, <strong>cliente individual</strong> ou <strong>selecione múltiplos clientes</strong> para gerar as planilhas de entrada e honorários
           </p>
         </div>
 
@@ -370,6 +508,41 @@ export default function UserDashboard({ initialMode }) {
             )}
           </div>
 
+          {/* Clientes Selecionados (Múltipla Seleção) */}
+          {selectedClients.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-medium text-gray-700">
+                  Clientes Selecionados ({selectedClients.length})
+                </h4>
+                <button
+                  onClick={clearSelection}
+                  className="text-xs text-red-600 hover:text-red-800 underline"
+                >
+                  Limpar tudo
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto">
+                {selectedClients.map((client) => (
+                  <div
+                    key={client.value}
+                    className="inline-flex items-center bg-blue-100 text-blue-800 text-sm px-3 py-1 rounded-full"
+                  >
+                    <Building2 className="w-3 h-3 mr-1" />
+                    <span className="font-medium">{client.value}</span>
+                    <span className="text-blue-600 ml-1">(Cód: {client.codigo})</span>
+                    <button
+                      onClick={() => removeClientFromSelection(client.value)}
+                      className="ml-2 text-blue-600 hover:text-blue-800"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Botão Gerar */}
           <button
             onClick={generateReport}
@@ -389,9 +562,11 @@ export default function UserDashboard({ initialMode }) {
               <>
                 <FileSpreadsheet className="w-5 h-5" />
                 <span>
-                  {!isValidSelection() 
-                    ? 'Selecione um grupo ou empresa primeiro'
-                    : 'Gerar Planilhas'
+                  {selectedClients.length > 0 
+                    ? `Gerar Planilhas (${selectedClients.length} empresa${selectedClients.length > 1 ? 's' : ''})`
+                    : !isValidSelection() 
+                      ? 'Selecione um grupo ou empresa primeiro'
+                      : 'Gerar Planilhas'
                   }
                 </span>
               </>
@@ -399,9 +574,15 @@ export default function UserDashboard({ initialMode }) {
           </button>
 
           {/* Status da Seleção */}
-          {searchTerm && (
+          {(searchTerm || selectedClients.length > 0) && (
             <div className="text-center text-sm">
-              {selectedItem ? (
+              {selectedClients.length > 0 ? (
+                <span className="text-green-600 flex items-center justify-center">
+                  <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
+                  <Users className="w-4 h-4 mr-1" />
+                  {selectedClients.length} empresa{selectedClients.length > 1 ? 's' : ''} selecionada{selectedClients.length > 1 ? 's' : ''} para geração múltipla
+                </span>
+              ) : selectedItem ? (
                 <span className="text-green-600 flex items-center justify-center">
                   <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
                   {selectedItem.type === 'grupo' ? (
@@ -445,10 +626,16 @@ export default function UserDashboard({ initialMode }) {
               <li>• Digite pelo menos 2 caracteres para pesquisar grupos ou empresas</li>
               <li>• <Users className="inline w-4 h-4 text-blue-500" /> Grupos aparecem com ícone de pessoas e mostram quantas empresas</li>
               <li>• <Building2 className="inline w-4 h-4 text-green-500" /> Empresas aparecem com ícone de prédio e código</li>
-              <li>• Clique na opção desejada na lista suspensa</li>
+              <li>• Clique na opção desejada na lista suspensa para <strong>adicionar à seleção</strong></li>
+              <li>• Você pode selecionar <strong>múltiplas empresas</strong> para gerar uma planilha combinada</li>
+              <li>• Os clientes selecionados aparecem como tags azuis abaixo do campo de pesquisa</li>
+              <li>• Clique no X em cada tag para remover um cliente da seleção</li>
+              <li>• Use "Limpar tudo" para remover todos os clientes selecionados</li>
               <li>• O campo ficará verde quando uma seleção válida for feita</li>
-              <li>• Clique em "Gerar Planilhas" para criar automaticamente ambas as planilhas</li>
-              <li>• Serão geradas: Ficha de Entrada e Honorários e Cobrança</li>
+              <li>• Para <strong>grupos</strong>: gera planilhas com todas as empresas do grupo</li>
+              <li>• Para <strong>empresas individuais</strong>: gera planilha específica para aquele cliente</li>
+              <li>• Para <strong>múltiplas empresas</strong>: gera planilhas combinadas para todos os clientes selecionados</li>
+              <li>• Clique em "Gerar Planilhas" para criar automaticamente as planilhas apropriadas</li>
             </ul>
           </div>
         </div>
@@ -462,7 +649,7 @@ export default function UserDashboard({ initialMode }) {
           <div className="p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-medium text-gray-900">
-                📊 Validar Planilhas Geradas
+                📊 Validar Planilhas Geradas {spreadsheetFiles.isMultiSelection ? '(Múltipla)' : ''}
               </h3>
               <button
                 onClick={() => {
@@ -476,13 +663,38 @@ export default function UserDashboard({ initialMode }) {
             
             <div className="space-y-4 mb-6">
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <h4 className="font-medium text-blue-900 mb-2">Informações do Grupo</h4>
-                <p className="text-sm text-blue-800 mb-1">
-                  <strong>Grupo:</strong> {spreadsheetFiles.grupo}
-                </p>
-                <p className="text-sm text-blue-800 mb-1">
-                  <strong>Empresas encontradas:</strong> {spreadsheetFiles.empresas}
-                </p>
+                <h4 className="font-medium text-blue-900 mb-2">
+                  {spreadsheetFiles.isMultiSelection ? 'Informações da Geração Múltipla' : 'Informações do Grupo'}
+                </h4>
+                {spreadsheetFiles.isMultiSelection ? (
+                  <>
+                    <p className="text-sm text-blue-800 mb-1">
+                      <strong>Tipo:</strong> Múltiplas Empresas
+                    </p>
+                    <p className="text-sm text-blue-800 mb-1">
+                      <strong>Empresas selecionadas:</strong> {spreadsheetFiles.selectedClients?.length || spreadsheetFiles.empresas}
+                    </p>
+                    <div className="text-sm text-blue-800 mb-1">
+                      <strong>Empresas:</strong>
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {spreadsheetFiles.selectedClients?.map((client, index) => (
+                          <span key={index} className="inline-block bg-blue-200 text-blue-800 px-2 py-1 rounded text-xs">
+                            {client.value} (Cód: {client.codigo})
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm text-blue-800 mb-1">
+                      <strong>Grupo:</strong> {spreadsheetFiles.grupo}
+                    </p>
+                    <p className="text-sm text-blue-800 mb-1">
+                      <strong>Empresas encontradas:</strong> {spreadsheetFiles.empresas}
+                    </p>
+                  </>
+                )}
                 <p className="text-sm text-blue-800">
                   <strong>Gerado em:</strong> {new Date(spreadsheetFiles.geradoEm).toLocaleString('pt-BR')}
                 </p>

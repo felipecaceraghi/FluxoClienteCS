@@ -17,9 +17,7 @@ class GroupSearchService {
         const startTime = new Date();
         
         try {
-            logger.info('=== Iniciando busca por grupo ===', { grupo: groupName });
-            
-            // 1. Baixar arquivo mais recente do SharePoint
+            logger.info('=== BUSCA EXATA POR GRUPO ATIVADA ===', { grupo: groupName });            // 1. Baixar arquivo mais recente do SharePoint
             logger.info('Baixando arquivo do SharePoint...');
             const downloadResult = await sharepointService.downloadFile();
             
@@ -36,24 +34,33 @@ class GroupSearchService {
             logger.info('Processando dados completos da planilha...');
             const allCompanies = await excelService.parseFullCompanyData(downloadResult.filePath);
             
-            // 3. Filtrar primeiro por grupo (case-insensitive)
-            const searchTermLower = groupName.toLowerCase().trim();
-            let filteredCompanies = allCompanies.filter(company => {
-                const companyGroup = company.grupo ? company.grupo.toLowerCase().trim() : '';
-                return companyGroup.includes(searchTermLower);
-            });
-
-            // 4. LÓGICA DE FALLBACK: Se não encontrar por grupo, procurar no campo 'cliente'
-            if (filteredCompanies.length === 0) {
-                logger.info(`Nenhum resultado para "${groupName}" no campo 'grupo'. Buscando no campo 'cliente'...`);
-                filteredCompanies = allCompanies.filter(company => {
-                    // Assumindo que o nome do campo na planilha é 'cliente'
-                    const companyClient = company.nome_fantasia ? company.nome_fantasia.toLowerCase().trim() : '';
-                    return companyClient.includes(searchTermLower);
-                });
-            }
-
-            // 5. Compilar resultado
+            // 3. Filtrar por grupo com busca exata
+            const searchTermLower = groupName.toLowerCase().trim();
+            
+            // Determinar o termo de busca exato
+            let searchTerm;
+            if (searchTermLower.startsWith('grupo ')) {
+                // Se já tem "grupo " no início, usar como está
+                searchTerm = searchTermLower;
+            } else {
+                // Se não tem "grupo ", adicionar
+                searchTerm = `grupo ${searchTermLower}`;
+            }
+            
+            let filteredCompanies = allCompanies.filter(company => {
+                const companyGroup = company.grupo ? company.grupo.toLowerCase().trim() : '';
+                const match = companyGroup === searchTerm;
+                if (match) {
+                    logger.info(`MATCH: "${companyGroup}" === "${searchTerm}" para empresa: ${company.nome_fantasia}`);
+                }
+                return match;
+            });
+            
+            logger.info(`Busca finalizada: termo="${searchTerm}", encontradas=${filteredCompanies.length}`);            // 4. LÓGICA DE FALLBACK: Se não encontrar por grupo, procurar no campo 'cliente'
+            if (filteredCompanies.length === 0) {
+                logger.info(`Nenhum resultado encontrado para "${groupName}" no campo 'grupo'. Busca exata - sem fallback.`);
+                // FALLBACK DESABILITADO para busca exata apenas por grupo
+            }            // 5. Compilar resultado
             const endTime = new Date();
             const duration = endTime - startTime;
             

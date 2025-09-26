@@ -123,6 +123,84 @@ class XlsxGeneratorController {
         }
     }
 
+    // Gerar planilha XLSX de ENTRADA para um cliente específico
+    async generateEntradaForClient(req, res) {
+        try {
+            const { cliente } = req.params;
+            
+            if (!cliente) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Parâmetro cliente é obrigatório'
+                });
+            }
+
+            logger.info('📊 Solicitação de geração de XLSX de Entrada por Cliente', { 
+                cliente, 
+                usuario: req.user?.email || 'unknown' 
+            });
+
+            // Buscar dados da empresa específica
+            const companyService = require('../services/company.service');
+            const companyResult = await companyService.getCompanyByCode(cliente);
+            
+            if (!companyResult.success) {
+                return res.status(404).json({
+                    success: false,
+                    error: `Empresa não encontrada: ${cliente}`
+                });
+            }
+
+            const company = companyResult.data;
+            
+            // Normalizar dados da empresa para o formato esperado
+            const normalizedCompany = xlsxGeneratorService.normalizeCompany(company);
+            
+            // Gerar planilha de entrada para uma empresa
+            const generationResult = await xlsxGeneratorService.generateForGroup(
+                `Cliente_${cliente}`, 
+                [normalizedCompany]
+            );
+            
+            if (!generationResult.success) {
+                throw new Error('Falha na geração da planilha de entrada por cliente');
+            }
+
+            // Limpar arquivos antigos em background
+            setImmediate(() => {
+                xlsxGeneratorService.cleanupOldFiles();
+            });
+
+            // Retornar informações do arquivo para visualização
+            return res.json({
+                success: true,
+                message: 'Planilha de entrada gerada com sucesso para o cliente',
+                data: {
+                    fileName: generationResult.fileName,
+                    downloadUrl: `/api/xlsx-generator/download/${generationResult.fileName}`,
+                    viewUrl: `/api/xlsx-generator/view/${generationResult.fileName}`,
+                    cliente: cliente,
+                    empresa: company.nome,
+                    tipo: 'entrada',
+                    geradoEm: new Date().toISOString()
+                }
+            });
+
+        } catch (error) {
+            logger.error('❌ Erro ao gerar planilha XLSX de entrada por cliente', {
+                cliente: req.params.cliente,
+                error: error.message,
+                stack: error.stack
+            });
+
+            return res.status(500).json({
+                success: false,
+                error: 'Erro interno do servidor ao gerar planilha de entrada por cliente',
+                message: error.message
+            });
+        }
+    }
+
     // Gerar planilha XLSX para um grupo específico (ENTRADA)
     async generateForGroup(req, res) {
         try {
@@ -545,7 +623,7 @@ class XlsxGeneratorController {
             const results = [];
 
             if (enviarSeparado) {
-                // Enviar cada planilha separadamente
+                // Enviar cada planilha separadamente COMO IMAGEM NO CORPO DO EMAIL
                 for (let i = 0; i < fileNames.length; i++) {
                     const fileName = fileNames[i];
                     const filePath = xlsxGeneratorService.getFilePath(fileName);
@@ -562,17 +640,17 @@ class XlsxGeneratorController {
                         destinatario = 'grupointerno@gofurthergroup.com.br';
                     } else if (tipoPlaniha === 'Honorários e Cobrança') {
                         const listaDeEmails = [
-                                'johann.muller@gofurthergroup.com.br',
+                            'johann.muller@gofurthergroup.com.br',
                                 'hugo.almeida@gofurthergroup.com.br',
                                 'rubens.moreira@gofurthergroup.com.br',
                                 'ana.moreira@gofurthergroup.com.br',
                                 'luana.oliveira@gofurthergroup.com.br',
                                 'financeironternoshare@gofurthergroup.com.br'
                         ];
-                        destinatario = listaDeEmails.join(',');
+                        destinatario = listaDeEmails.join(','); 
                     } else {
                         // Fallback para qualquer outro caso
-                        destinatario = 'grupointerno@gofurthergroup.com.br';
+                        destinatario = 'felipe.caceraghi@gofurthergroup.com.br';
                     }
                         // ===============================================================================
                     
@@ -587,12 +665,13 @@ class XlsxGeneratorController {
                     }
                     
                     try {
-                        logger.info(`📧 Enviando planilha ${i + 1}/${fileNames.length}: ${tipoPlaniha}`, {
+                        logger.info(`📧 Enviando planilha ${i + 1}/${fileNames.length}: ${tipoPlaniha} COMO IMAGEM`, {
                             arquivo: fileName,
                             tipo: tipoPlaniha,
                             para: destinatario
                         });
 
+                        // ENVIAR COMO IMAGEM NO CORPO DO EMAIL - NUNCA COMO ANEXO
                         await emailService.sendFileAsImageEmail({
                             to: destinatario,
                             subject: emailSubject,
@@ -605,10 +684,11 @@ class XlsxGeneratorController {
                             tipo: tipoPlaniha,
                             emailSent: true,
                             subject: emailSubject,
-                            sentTo: destinatario
+                            sentTo: destinatario,
+                            sentAs: 'IMAGEM_NO_CORPO'
                         });
 
-                        logger.info(`✅ Planilha ${tipoPlaniha} enviada com sucesso para ${destinatario}`);
+                        logger.info(`✅ Planilha ${tipoPlaniha} enviada como IMAGEM para ${destinatario}`);
 
                     } catch (emailError) {
                         logger.error(`❌ Erro ao enviar planilha ${tipoPlaniha}:`, {
@@ -625,27 +705,23 @@ class XlsxGeneratorController {
                     }
                 }
             } else {
-                // Lógica para enviar um e-mail único com anexos (mantida como estava)
-                const attachments = fileNames.map(fileName => ({
-                    path: xlsxGeneratorService.getFilePath(fileName),
-                    filename: fileName
-                }));
-
+                // ENVIO ÚNICO COM MÚLTIPLAS PLANILHAS COMO HTML/IMAGENS - NUNCA ANEXOS
                 const emailSubject = `Entrada e Honorários de Cliente - ${grupo}`;
 
                 try {
-                    logger.info('📧 Enviando email único com múltiplas planilhas', {
-                        arquivos: fileNames.length,
-                        anexos: attachments.length
+                    logger.info('📧 Enviando email único com múltiplas planilhas COMO HTML/IMAGENS', {
+                        arquivos: fileNames.length
                     });
 
-                    await emailService.sendMultipleSpreadsheetsInOne({
+                    // USAR NOVO MÉTODO QUE ENVIA COMO HTML/IMAGENS - NUNCA ANEXOS
+                    await emailService.sendMultipleSpreadsheetsAsImages({
                         spreadsheets: fileNames.map(fileName => ({
                             fileName: fileName,
                             filePath: xlsxGeneratorService.getFilePath(fileName)
                         })),
                         grupo: grupo,
-                        baseEmailAddress: 'felipe.caceraghi@gofurthergroup.com.br'
+                        to: 'felipe.caceraghi@gofurthergroup.com.br',
+                        subject: emailSubject
                     });
 
                     results.push({
@@ -653,15 +729,15 @@ class XlsxGeneratorController {
                         tipo: 'Múltiplas Planilhas',
                         emailSent: true,
                         subject: emailSubject,
-                        attachments: attachments.length
+                        sentAs: 'MULTIPLAS_IMAGENS_NO_CORPO'
                     });
 
-                    logger.info('✅ Email único com múltiplas planilhas enviado com sucesso');
+                    logger.info('✅ Email único com múltiplas planilhas enviado como IMAGENS');
 
                 } catch (emailError) {
                     logger.error('❌ Erro ao enviar email único:', emailError);
                     results.push({
-                          fileNames: fileNames,
+                        fileNames: fileNames,
                         tipo: 'Múltiplas Planilhas',
                         emailSent: false,
                         error: emailError.message
@@ -710,15 +786,16 @@ class XlsxGeneratorController {
 
             return res.json({
                 success: true,
-                message: `Processamento concluído: ${emailsSent}/${results.length} emails enviados, ${filesNetworkSaved}/${fileNames.length} arquivos salvos em rede`,
+                message: `Processamento concluído: ${emailsSent}/${results.length} emails enviados COMO IMAGENS, ${filesNetworkSaved}/${fileNames.length} arquivos salvos em rede`,
                 data: {
                     emailResults: results,
                     networkResults: networkResults,
                     grupo: grupo,
                     enviarSeparado: enviarSeparado,
-                    processedAt: new Date().toISOString()
+                    processedAt: new Date().toISOString(),
+                    note: 'TODOS OS EMAILS ENVIADOS COMO IMAGENS NO CORPO - NUNCA ANEXOS'
                 }
-            });
+            }   );
 
         } catch (error) {
             logger.error('❌ Erro no processo de validação e envio duplo', {
@@ -771,80 +848,36 @@ class XlsxGeneratorController {
             const fs = require('fs');
             const path = require('path');
 
-            // 1. Enviar por email com planilha E imagem
+            // ENVIAR COMO HTML NATIVO - NUNCA COMO ANEXO
             let emailSent = false;
             try {
                 const emailSubject = `Entrada de Cliente - ${grupo} - Operação`;
                 
-                logger.info('� ENVIANDO EMAIL SIMPLES', { 
+                logger.info('📧 ENVIANDO EMAIL COMO HTML NATIVO - SEM ANEXOS', { 
                     arquivo: fileName,
                     caminho: filePath,
                     existe: fs.existsSync(filePath)
                 });
                 
-                // CONVERTER EXCEL PARA IMAGEM COM LAYOUT EXATO USANDO PYTHON
-                const pythonImageService = require('../services/python-excel-to-image.service');
-                const tempImagePath = filePath.replace('.xlsx', '_python_exato.png');
-                
-                logger.info('� CONVERTENDO COM PYTHON PARA LAYOUT EXATO...', { 
-                    arquivo: fileName,
-                    caminho: filePath,
-                    imagemPath: tempImagePath
-                });
-                
-                // Gerar imagem EXATA do Excel usando Python
-                await pythonImageService.convertExcelToImageExact(filePath, tempImagePath);
-                
-                logger.info('✅ IMAGEM PYTHON GERADA! Enviando por email...', { 
-                    imagemPath: tempImagePath,
-                    imagemExiste: fs.existsSync(tempImagePath)
-                });
-                
-                // Verificar se a imagem foi criada
-                if (!fs.existsSync(tempImagePath)) {
-                    throw new Error('Imagem não foi criada pelo Python');
-                }
-                
-                // Enviar email COM A IMAGEM INCORPORADA NO CORPO
-                logger.info('🔄 Iniciando envio de email com tabela HTML...', {
+                // ENVIAR COMO HTML NATIVO NO CORPO DO EMAIL
+                await emailService.sendFileAsNativeHtmlEmail({
                     to: 'felipe.caceraghi@gofurthergroup.com.br',
                     subject: emailSubject,
                     grupo: grupo,
                     excelFilePath: filePath
                 });
                 
-                try {
-                    await emailService.sendFileAsNativeHtmlEmail({
-                        to: 'felipe.caceraghi@gofurthergroup.com.br',
-                        subject: emailSubject,
-                        grupo: grupo,
-                        excelFilePath: filePath
-                    });
-                    
-                    emailSent = true;
-                    logger.info('✅ EMAIL COM HTML NATIVO ENVIADO COM SUCESSO!', { 
-                        arquivo: fileName,
-                        para: 'felipe.caceraghi@gofurthergroup.com.br'
-                    });
-                } catch (emailError) {
-                    logger.error('❌ ERRO NO ENVIO DO EMAIL COM HTML NATIVO:', {
-                        erro: emailError.message,
-                        stack: emailError.stack,
-                        arquivo: fileName
-                    });
-                    emailSent = false;
-                }
-                
-                // Limpar arquivo temporário se existir
-                if (fs.existsSync(tempImagePath)) {
-                    fs.unlinkSync(tempImagePath);
-                    logger.info('🗑️ Imagem temporária removida');
-                }
+                emailSent = true;
+                logger.info('✅ EMAIL ENVIADO COMO HTML NATIVO - SEM ANEXOS!', { 
+                    arquivo: fileName,
+                    para: 'felipe.caceraghi@gofurthergroup.com.br'
+                });
                 
             } catch (emailError) {
-                logger.error('❌ ERRO NO EMAIL', { 
-                    arquivo: fileName, 
-                    error: emailError.message
+                logger.error('❌ ERRO NO ENVIO DO EMAIL:', {
+                    erro: emailError.message,
+                    stack: emailError.stack,
+                    arquivo: fileName
                 });
                 emailSent = false;
             }
@@ -897,13 +930,15 @@ class XlsxGeneratorController {
 
             return res.json({
                 success: true,
-                message: 'Planilha validada e processada com sucesso!',
+                message: 'Planilha validada e enviada como HTML - SEM ANEXOS!',
                 data: {
                     emailSent: emailSent,
                     networkSaved: true,
                     fileName: fileName,
                     grupo: grupo,
-                    processedAt: new Date().toISOString()
+                    sentAs: 'HTML_NO_CORPO',
+                    processedAt: new Date().toISOString(),
+                    note: 'EMAIL ENVIADO COMO HTML NO CORPO - NUNCA ANEXO'
                 }
             });
 
@@ -983,30 +1018,31 @@ class XlsxGeneratorController {
         try {
             const { to = 'felipe.caceraghi@gofurthergroup.com.br' } = req.body;
             
-            logger.info('📧 Teste de envio de email', { 
+            logger.info('📧 Teste de envio de email SEM ANEXOS', { 
                 para: to,
                 usuario: req.user?.email || 'unknown' 
             });
 
             const emailService = require('../services/email.service');
 
-            // Tentar enviar email de teste
+            // EMAIL DE TESTE SIMPLES - SEM ANEXOS
             await emailService.sendFileByEmail({
                 to: to,
                 subject: `Teste de Email - ${new Date().toLocaleString('pt-BR')}`,
-                text: `Este é um email de teste enviado em ${new Date().toLocaleString('pt-BR')}.\n\nSistema: FluxoClienteCS\nUsuário: ${req.user?.email || 'unknown'}`,
-                attachments: [] // Sem anexos para teste
+                text: `Este é um email de teste enviado em ${new Date().toLocaleString('pt-BR')}.\n\nSistema: FluxoClienteCS\nUsuário: ${req.user?.email || 'unknown'}\n\nNOTA: Este sistema NUNCA envia anexos - apenas conteúdo no corpo do email.`,
+                attachments: [] // SEMPRE VAZIO - NUNCA ANEXOS
             });
 
-            logger.info('✅ Email de teste enviado com sucesso', { para: to });
+            logger.info('✅ Email de teste enviado SEM ANEXOS', { para: to });
 
             return res.json({
                 success: true,
-                message: 'Email de teste enviado com sucesso!',
+                message: 'Email de teste enviado SEM ANEXOS!',
                 data: {
                     emailSent: true,
                     to: to,
-                    sentAt: new Date().toISOString()
+                    sentAt: new Date().toISOString(),
+                    note: 'EMAIL ENVIADO SEM ANEXOS'
                 }
             });
 

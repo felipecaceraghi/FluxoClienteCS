@@ -213,6 +213,10 @@ router.get('/generate-saida/:grupo', xlsxGeneratorController.generateSaidaForGro
 // GET /api/xlsx-generator/generate-saida-cliente/:cliente
 router.get('/generate-saida-cliente/:cliente', xlsxGeneratorController.generateSaidaForClient);
 
+// Gerar planilha XLSX de ENTRADA para um cliente específico
+// GET /api/xlsx-generator/generate-entrada-cliente/:cliente
+router.get('/generate-entrada-cliente/:cliente', xlsxGeneratorController.generateEntradaForClient);
+
 // Gerar planilha XLSX para um grupo específico (ENTRADA)
 // GET /api/xlsx-generator/generate/:grupo
 router.get('/generate/:grupo', xlsxGeneratorController.generateForGroup);

@@ -150,10 +150,10 @@ class XlsxGeneratorService {
         c.faturamento_anual = raw.faturamento_anual || raw.faturamento || raw.revenue || '';
 
         // CORREÇÃO INTELIGENTE DE DADOS DESALINHADOS
-        const fixed = this.fixDataMisalignment(c);
+        c = this.fixDataMisalignment(c);
 
         // Keep originals for any other property; return normalized object
-        return fixed;
+        return c;
     }
 
     // Função para corrigir dados desalinhados da API
@@ -228,13 +228,6 @@ class XlsxGeneratorService {
             // Usar o valor do BPO RH como total por enquanto
             fixed.honorario_mensal_total = fixed.vl_bpo_rh;
             logger.info(`💰 Honorário total definido como: ${fixed.vl_bpo_rh}`);
-        }
-        
-        // CORREÇÃO 5: OBSERVAÇÃO CLOSER MAPEAMENTO INCORRETO
-        // Se observacao_closer está vazio mas motivo_troca tem conteúdo, mapear corretamente
-        if (!fixed.observacao_closer && fixed.motivo_troca) {
-            fixed.observacao_closer = fixed.motivo_troca;
-            logger.info(`📝 Observação closer mapeada de motivo_troca: ${fixed.motivo_troca.substring(0, 50)}...`);
         }
         
         return fixed;
@@ -631,22 +624,17 @@ class XlsxGeneratorService {
                             logger.info(`📅 Data DD/MM/YY: "${dateStr}" → ${isoDateString}`);
                         }
                     }
-                    // FORMATO 2: YYYY-MM-DD (FORMATO AMERICANO - MM/DD TROCADOS)
+                    // FORMATO 2: YYYY-MM-DD (ex: "2025-01-10") 
                     else if (dateStr.includes('-')) {
                         const parts = dateStr.split('-');
                         if (parts.length === 3) {
                             const year = parts[0];
-                            const americanMonth = parts[1]; // Na verdade é o DIA
-                            const americanDay = parts[2];   // Na verdade é o MÊS
+                            const month = parts[1];
+                            const day = parts[2];
                             
-                            // CORREÇÃO: Tratar como formato americano MM/DD
-                            // "2025-01-10" = ano 2025, mês americano 01 (dia real), dia americano 10 (mês real)
-                            const realDay = americanMonth;    // 01 → dia 1
-                            const realMonth = americanDay;    // 10 → mês 10 (outubro)
-                            
-                            const isoDateString = `${year}-${realMonth.padStart(2, '0')}-${realDay.padStart(2, '0')}T00:00:00`;
+                            const isoDateString = `${year}-${month}-${day}T00:00:00`;
                             dataInicio = new Date(isoDateString);
-                            logger.info(`📅 Data YYYY-MM-DD (americano): "${dateStr}" → CORRIGIDO: "${isoDateString}" (dia ${realDay}, mês ${realMonth})`);
+                            logger.info(`📅 Data YYYY-MM-DD: "${dateStr}" → ${isoDateString}`);
                         }
                     }
                     else {
@@ -667,9 +655,9 @@ class XlsxGeneratorService {
                 } else {
                     
                     vigenciaRow.push(''); // Caso a data da API seja inválida
-                }
-});
-            while (vigenciaRow.length < 9) vigenciaRow.push('');
+                }
+            });
+     Hello. OK. I. **** Are they all still alive? King series has been. He definitely Angel ago. Who is the Musica? Think about the human biology. FT History was our physical tutorials of work at each table was in a special point. I. They got the subway cayenne.        while (vigenciaRow.length < 9) vigenciaRow.push('');
             this.addDataRow(vigenciaRow);
             // ==================================================================
             // FIM DA LÓGICA ATUALIZADA
@@ -1468,4 +1456,3 @@ class XlsxGeneratorService {
 }
 
 module.exports = new XlsxGeneratorService();
-
