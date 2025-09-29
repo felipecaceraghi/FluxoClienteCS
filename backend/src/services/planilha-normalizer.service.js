@@ -56,7 +56,74 @@ const cadastroMapping = {
     'bpo_contabil': 'bpo_contabil',
     'bpo_fiscal': 'bpo_fiscal',
     'bpo_folha': 'bpo_folha',
-    'bpo_financeiro': 'bpo_financeiro'
+    'bpo_financeiro': 'bpo_financeiro',
+    'bpo_rh': 'bpo_rh',
+    'bpo_cnd': 'bpo_cnd',
+    // Campos de contato (mapeamento corrigido baseado nos headers reais da planilha)
+    'contato_principal_nome': 'contato_principal_nome',
+    'contato_principal_cargo': 'contato_principal_cargo',
+    'contato_principal_email': 'contato_principal_email',
+    'contato_principal_celular': 'contato_principal_celular',
+    'contato_principal_telefone': 'contato_principal_telefone',
+    // Mapeamento dos headers reais da planilha
+    'Contato Principal - Nome': 'contato_principal_nome',
+    'Contato Principal - Cargo': 'contato_principal_cargo',
+    'Contato Principal - Email': 'contato_principal_email',
+    'Contato Principal - Celular': 'contato_principal_celular',
+    // Campos financeiros e operacionais
+    'faturamento_anual': 'faturamento_anual',
+    'nf_entradas': 'nf_entradas',
+    'nf_saidas': 'nf_saidas',
+    'nf_servicos_prestados': 'nf_servicos_prestados',
+    'nf_servicos_tomados': 'nf_servicos_tomados',
+    'ctes_entrada': 'ctes_entrada',
+    'ctes_saida': 'ctes_saida',
+    // Campos de funcionários
+    'pro_labore': 'pro_labore',
+    'estagiarios': 'estagiarios',
+    'aprendizes': 'aprendizes',
+    'autonomos_rpa': 'rpa',
+    'domesticas_clt': 'domesticas_clt',
+    'colab_clt': 'colab_clt',
+    'funcionarios_clt': 'colab_clt',
+    // Campos de sistemas
+    'sistema_contabil': 'sistema_contabil',
+    'sistema_folha': 'sistema_folha',
+    'sistema_fiscal': 'sistema_fiscal',
+    'sistema_financeiro': 'sistema_financeiro',
+    // Campos operacionais
+    'sla': 'sla',
+    'link_do_site': 'link_do_site',
+    'deadline': 'deadline_util_corrente',
+    'periodicidade_deadline': 'deadline_periodicidade',
+    'dia_deadline': 'deadline_dia',
+    'cnae': 'atividade_especialidade',
+    'atividade_economica': 'atividade_especialidade',
+    // Campos comerciais
+    'closer': 'closer',
+    'prospector': 'prospector',
+    'observacao_closer': 'observacao_closer',
+    'observacoes': 'observacoes_cadastro',
+    'observacoes_cadastro': 'observacoes_cadastro',
+    // Campos de implantação
+    'empresa_aberta_go': 'empresa_aberta_go',
+    'implantacao': 'implantacao',
+    'vencimento_implantacao': 'vencimento_implantacao',
+    // Campos de faturamento por serviço
+    'bpo_contabil_faturado': 'bpo_contabil_faturado',
+    'bpo_fiscal_faturado': 'bpo_fiscal_faturado',
+    'bpo_folha_faturado': 'bpo_folha_faturado',
+    'bpo_financeiro_faturado': 'bpo_financeiro_faturado',
+    'bpo_rh_faturado': 'bpo_rh_faturado',
+    'bpo_legal_faturado': 'bpo_legal_faturado',
+    // Campos de valores
+    'honorario_mensal_total': 'honorario_mensal_total',
+    'vl_bpo_contabil': 'vl_bpo_contabil',
+    'vl_bpo_fiscal': 'vl_bpo_fiscal',
+    'vl_bpo_folha': 'vl_bpo_folha',
+    'vl_bpo_financeiro': 'vl_bpo_financeiro',
+    'vl_bpo_rh': 'vl_bpo_rh',
+    'vl_bpo_legal': 'vl_bpo_legal'
 };
 
 const produtosMapping = {

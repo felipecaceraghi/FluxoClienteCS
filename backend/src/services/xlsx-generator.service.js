@@ -905,48 +905,24 @@ class XlsxGeneratorService {
     this.addEmptyDataRow();
     this.addDataRow(['', '', 'Sistemas', '', '', '', '', '', '']);
 
-    // Passo 3: Lógica de decisão
-    // SE só existe 1 sistema único para todas as áreas (Contábil, Folha, Fiscal)...
-    if (sistemasUnicosNoGeral.length === 1) {
-        // ...então consolidamos a exibição.
-        const nomeDoSistema = sistemasUnicosNoGeral[0];
-        const labels = [];
+    // Sempre mostrar sistemas em linhas separadas para garantir preenchimento correto
+    const textoContabil = contabeis.join(', ');
+    const textoFolha = folhas.join(', ');
+    const textoFiscal = fiscais.join(', ');
+    const textoFinanceiro = financeiros.join(', ');
 
-        if (contabeis.length > 0) labels.push('Contábil');
-        if (folhas.length > 0) labels.push('Folha');
-        if (fiscais.length > 0) labels.push('Fiscal');
-        if (financeiros.length > 0) labels.push('Financeiro');  
-        
-        // Formata o label de forma inteligente (ex: "Contábil e Fiscal" ou "Contábil, Folha e Fiscal")
-        let finalLabel = '';
-        if (labels.length > 1) {
-            finalLabel = labels.slice(0, -1).join(', ') + ' e ' + labels.slice(-1);
-        } else {
-            finalLabel = labels.join('');
-        }
+    if (textoFinanceiro) {
+        this.addDataRow(['', '', 'Financeiro:', textoFinanceiro, '', '', '', '', '']);
+    }
 
-        this.addDataRow(['', '', `${finalLabel}:`, nomeDoSistema, '', '', '', '', '']);
-
-    } else {
-        // SE os sistemas são diferentes (ou não há nenhum), mostramos em linhas separadas.
-        const textoContabil = contabeis.join(', ');
-        const textoFolha = folhas.join(', ');
-        const textoFiscal = fiscais.join(', ');
-        const textoFinanceiro = financeiros.join(', ');
-
-        if (textoFinanceiro) {
-            this.addDataRow(['', '', 'Financeiro:', textoFinanceiro, '', '', '', '', '']);
-        }
-
-        if (textoContabil) {
-            this.addDataRow(['', '', 'Contábil:', textoContabil, '', '', '', '', '']);
-        }
-        if (textoFolha) {
-            this.addDataRow(['', '', 'Folha de Pagamento:', textoFolha, '', '', '', '', '']);
-        }
-        if (textoFiscal) {
-            this.addDataRow(['', '', 'Fiscal:', textoFiscal, '', '', '', '', '']);
-        }
+    if (textoContabil) {
+        this.addDataRow(['', '', 'Contábil:', textoContabil, '', '', '', '', '']);
+    }
+    if (textoFolha) {
+        this.addDataRow(['', '', 'Folha de Pagamento:', textoFolha, '', '', '', '', '']);
+    }
+    if (textoFiscal) {
+        this.addDataRow(['', '', 'Fiscal:', textoFiscal, '', '', '', '', '']);
     }
 
     this.addEmptyDataRow();

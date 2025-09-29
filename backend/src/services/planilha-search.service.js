@@ -138,13 +138,47 @@ async function pesquisaClienteProdutos(term) {
     return searchInFile(file, parseInt(process.env.PRODUTOS_HEADER_ROW) || 4, process.env.PRODUTOS_SHEET_NAME || 'Produtos por Cliente', term, 'produtos');
 }
 
+// Nova função para buscar cliente específico por código
+async function pesquisaClientePorCodigo(codigo) {
+    try {
+        await ensureUpdatedFiles(); // Garantir arquivos atualizados
+        
+        const file = path.join(STORAGE_DIR, process.env.CADASTRO_CLIENTES_FILE_NAME || 'Cadastro_de_Clientes_v1.xlsm');
+        const rows = parseSheet(file, parseInt(process.env.CADASTRO_HEADER_ROW) || 5, process.env.CADASTRO_SHEET_NAME || 'Clientes');
+
+        // Buscar linha onde o código corresponde exatamente
+        const matches = rows.filter(r => {
+            // Campo correto na planilha: "Código Domínio"
+            const codigoValue = r['Código Domínio'];
+            return codigoValue && String(codigoValue).trim() === String(codigo).trim();
+        });
+
+        if (matches.length === 0) {
+            return { success: false, error: `Empresa com código ${codigo} não encontrada na planilha de cadastro` };
+        }
+
+        if (matches.length > 1) {
+            logger.warn(`⚠️ Múltiplas empresas encontradas com código ${codigo}, usando a primeira`);
+        }
+
+        // Normalizar o resultado
+        const normalized = normalizeCadastro(matches[0]);
+
+        return { success: true, count: 1, rows: [normalized] };
+    } catch (error) {
+        logger.error('Erro ao buscar cliente por código:', error);
+        return { success: false, error: error.message };
+    }
+}
+
 module.exports = {
     pesquisaGrupoSaida,
     pesquisaClienteSaida,
     pesquisaGrupoCadastro,
     pesquisaClienteCadastro,
     pesquisaGrupoProdutos,
-    pesquisaClienteProdutos
+    pesquisaClienteProdutos,
+    pesquisaClientePorCodigo
 };
 
 // Aggregate searches across all three planilhas

@@ -1241,49 +1241,417 @@ class XlsxGeneratorController {
         }
     }
 
-    // Estatísticas de relatórios
-    async getStats(req, res) {
+    // Validar e enviar planilhas múltiplas por email
+    async validateAndSendMulti(req, res) {
         try {
+            const { fileNames, selectedClients, approved, enviarSeparado } = req.body;
+            
+            if (!approved) {
+                return res.json({
+                    success: true,
+                    message: 'Planilhas rejeitadas pelo usuário',
+                    action: 'rejected'
+                });
+            }
+
+            logger.info('📧📧📧 Validação e envio de planilhas múltiplas', { 
+                arquivos: fileNames.length,
+                clientes: selectedClients?.length || 0,
+                enviarSeparado: enviarSeparado,
+                usuario: req.user?.email || 'unknown' 
+            });
+
+            // Verificar se todos os arquivos existem
+            for (const fileName of fileNames) {
+                if (!xlsxGeneratorService.fileExists(fileName)) {
+                    return res.status(404).json({
+                        success: false,
+                        error: `Arquivo não encontrado: ${fileName}`
+                    });
+                }
+            }
+
+            const emailService = require('../services/email.service');
             const fs = require('fs');
             const path = require('path');
             
-            const reportsDir = path.join(__dirname, '../storage/generated-reports');
-            
-            if (!fs.existsSync(reportsDir)) {
-                return res.json({
-                    success: true,
-                    totalReports: 0,
-                    lastSync: null
-                });
+            const results = [];
+
+            if (enviarSeparado) {
+                // Enviar cada planilha separadamente COMO IMAGEM NO CORPO DO EMAIL
+                for (let i = 0; i < fileNames.length; i++) {
+                    const fileName = fileNames[i];
+                    const filePath = xlsxGeneratorService.getFilePath(fileName);
+                    
+                    const tipoPlaniha = fileName.includes('_Entrada_') ? 'Entrada' : 
+                                        fileName.includes('_Cobranca_') ? 'Honorários e Cobrança' : 
+                                        fileName.includes('_Saida_') ? 'Saída' :
+                                        `Planilha ${i + 1}`;
+                    
+                    // Determinar destinatário baseado no tipo
+                    let destinatario;
+                    if (tipoPlaniha === 'Entrada') {
+                        destinatario = 'grupointerno@gofurthergroup.com.br';
+                    } else if (tipoPlaniha === 'Honorários e Cobrança') {
+                        const listaDeEmails = [
+                            'johann.muller@gofurthergroup.com.br',
+                            'hugo.almeida@gofurthergroup.com.br',
+                            'rubens.moreira@gofurthergroup.com.br',
+                            'ana.moreira@gofurthergroup.com.br',
+                            'luana.oliveira@gofurthergroup.com.br',
+                            'financeironternoshare@gofurthergroup.com.br'
+                        ];
+                        destinatario = listaDeEmails.join(','); 
+                    } else if (tipoPlaniha === 'Saída') {
+                        destinatario = 'felipe.caceraghi@gofurthergroup.com.br';
+                    } else {
+                        // Fallback para qualquer outro caso
+                        destinatario = 'felipe.caceraghi@gofurthergroup.com.br';
+                    }
+                    
+                    let emailSubject;
+                    const clienteInfo = selectedClients?.[i] ? ` - ${selectedClients[i].value}` : '';
+
+                    if (tipoPlaniha === 'Entrada') {
+                        emailSubject = `Entrada de Cliente${clienteInfo} - Múltipla Geração`;
+                    } else if (tipoPlaniha === 'Honorários e Cobrança') {
+                        emailSubject = `Honorários e Cobrança de Cliente${clienteInfo} - Múltipla Geração`;
+                    } else if (tipoPlaniha === 'Saída') {
+                        emailSubject = `Saída de Cliente${clienteInfo} - Múltipla Geração`;
+                    } else {
+                        emailSubject = `${tipoPlaniha}${clienteInfo} - Múltipla Geração`;
+                    }
+                    
+                    try {
+                        logger.info(`📧 Enviando planilha múltipla ${i + 1}/${fileNames.length}: ${tipoPlaniha} COMO IMAGEM`, {
+                            arquivo: fileName,
+                            tipo: tipoPlaniha,
+                            para: destinatario,
+                            cliente: selectedClients?.[i]?.value || 'N/A'
+                        });
+
+                        // ENVIAR COMO IMAGEM NO CORPO DO EMAIL - NUNCA COMO ANEXO
+                        await emailService.sendFileAsImageEmail({
+                            to: destinatario,
+                            subject: emailSubject,
+                            grupo: `Múltipla Geração${clienteInfo}`,
+                            excelFilePath: filePath
+                        });
+
+                        results.push({
+                            fileName: fileName,
+                            tipo: tipoPlaniha,
+                            cliente: selectedClients?.[i] || null,
+                            emailSent: true,
+                            subject: emailSubject,
+                            sentTo: destinatario,
+                            sentAs: 'IMAGEM_NO_CORPO'
+                        });
+
+                        logger.info(`✅ Planilha múltipla ${tipoPlaniha} enviada como IMAGEM para ${destinatario}`);
+
+                    } catch (emailError) {
+                        logger.error(`❌ Erro ao enviar planilha múltipla ${tipoPlaniha}:`, {
+                            erro: emailError.message,
+                            arquivo: fileName
+                        });
+
+                        results.push({
+                            fileName: fileName,
+                            tipo: tipoPlaniha,
+                            cliente: selectedClients?.[i] || null,
+                            emailSent: false,
+                            error: emailError.message
+                        });
+                    }
+                }
+            } else {
+                // ENVIO ÚNICO COM MÚLTIPLAS PLANILHAS COMO HTML/IMAGENS - NUNCA ANEXOS
+                const emailSubject = `Planilhas Múltiplas - ${selectedClients?.length || fileNames.length} Clientes`;
+
+                try {
+                    logger.info('📧 Enviando email único com múltiplas planilhas COMO HTML/IMAGENS', {
+                        arquivos: fileNames.length,
+                        clientes: selectedClients?.length || 0
+                    });
+
+                    // USAR NOVO MÉTODO QUE ENVIA COMO HTML/IMAGENS - NUNCA ANEXOS
+                    await emailService.sendMultipleSpreadsheetsAsImages({
+                        spreadsheets: fileNames.map(fileName => ({
+                            fileName: fileName,
+                            filePath: xlsxGeneratorService.getFilePath(fileName)
+                        })),
+                        grupo: `Múltipla Geração - ${selectedClients?.length || fileNames.length} Clientes`,
+                        to: 'felipe.caceraghi@gofurthergroup.com.br',
+                        subject: emailSubject
+                    });
+
+                    results.push({
+                        fileNames: fileNames,
+                        tipo: 'Múltiplas Planilhas',
+                        clientes: selectedClients || [],
+                        emailSent: true,
+                        subject: emailSubject,
+                        sentAs: 'MULTIPLAS_IMAGENS_NO_CORPO'
+                    });
+
+                    logger.info('✅ Email único com múltiplas planilhas enviado como IMAGENS');
+
+                } catch (emailError) {
+                    logger.error('❌ Erro ao enviar email único múltiplo:', emailError);
+                    results.push({
+                        fileNames: fileNames,
+                        tipo: 'Múltiplas Planilhas',
+                        clientes: selectedClients || [],
+                        emailSent: false,
+                        error: emailError.message
+                    });
+                }
             }
 
-            const files = fs.readdirSync(reportsDir).filter(file => file.endsWith('.xlsx'));
-            
-            let lastSync = null;
-            if (files.length > 0) {
-                // Pegar a data do arquivo mais recente
-                const fileTimes = files.map(file => {
-                    const filePath = path.join(reportsDir, file);
-                    return fs.statSync(filePath).mtime;
-                });
-                lastSync = new Date(Math.max(...fileTimes)).toISOString();
+            // Lógica de salvar na rede (mantida como estava)
+            const networkResults = [];
+            try {
+                const networkPath = 'R:\\Publico\\felipec';
+                if (!fs.existsSync(networkPath)) {
+                    try {
+                        fs.mkdirSync(networkPath, { recursive: true });
+                    } catch (mkdirError) {
+                        logger.warn('⚠️ Não foi possível acessar/criar pasta de rede', { 
+                            path: networkPath,
+                            error: mkdirError.message 
+                        });
+                    }
+                }
+                for (const fileName of fileNames) {
+                    try {
+                        const filePath = xlsxGeneratorService.getFilePath(fileName);
+                        const destPath = path.join(networkPath, fileName);
+                        fs.copyFileSync(filePath, destPath);
+                        networkResults.push({ fileName, saved: true });
+                        logger.info('✅ Arquivo múltiplo salvo na pasta de rede', { 
+                            origem: filePath,
+                            destino: destPath 
+                        });
+                    } catch (copyError) {
+                        networkResults.push({ fileName, saved: false, error: copyError.message });
+                        logger.error('❌ Erro ao salvar arquivo múltiplo na rede', { 
+                            arquivo: fileName, 
+                            error: copyError.message 
+                        });
+                    }
+                }
+            } catch (networkError) {
+                logger.error('❌ Erro geral na pasta de rede múltipla', networkError);
             }
+
+            const emailsSent = results.filter(r => r.emailSent).length;
+            const filesNetworkSaved = networkResults.filter(r => r.saved).length;
 
             return res.json({
                 success: true,
-                totalReports: files.length,
-                lastSync: lastSync
+                message: `Processamento múltiplo concluído: ${emailsSent}/${results.length} emails enviados COMO IMAGENS, ${filesNetworkSaved}/${fileNames.length} arquivos salvos em rede`,
+                data: {
+                    emailResults: results,
+                    networkResults: networkResults,
+                    clientes: selectedClients || [],
+                    enviarSeparado: enviarSeparado,
+                    processedAt: new Date().toISOString(),
+                    note: 'TODOS OS EMAILS ENVIADOS COMO IMAGENS NO CORPO - NUNCA ANEXOS - GERAÇÃO MÚLTIPLA'
+                }
+            }   );
+
+        } catch (error) {
+            logger.error('❌ Erro no processo de validação e envio múltiplo', {
+                error: error.message,
+                stack: error.stack
+            });
+            return res.status(500).json({
+                success: false,
+                error: 'Erro interno do servidor no processo de validação e envio múltiplo'
+            });
+        }
+    }
+
+    // Gerar planilhas múltiplas de ENTRADA para vários clientes
+    async generateMultiEntrada(req, res) {
+        try {
+            const { clientCodes, tiposPlanilha, enviarSeparado, emailDestinatario } = req.body;
+            
+            if (!clientCodes || !Array.isArray(clientCodes) || clientCodes.length === 0) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'clientCodes (array não vazio) é obrigatório'
+                });
+            }
+
+            logger.info('📊📊 Solicitação de geração múltipla de ENTRADA', { 
+                clientes: clientCodes.length,
+                codigos: clientCodes,
+                tiposPlanilha: tiposPlanilha || ['entrada', 'cobranca'],
+                enviarSeparado: enviarSeparado,
+                usuario: req.user?.email || 'unknown' 
+            });
+
+            const companyService = require('../services/company.service');
+            const results = [];
+            const normalizedCompanies = [];
+
+            // Buscar e normalizar dados de cada empresa
+            for (const clientCode of clientCodes) {
+                const companyResult = await companyService.getCompanyCompleteData(clientCode);
+                
+                if (!companyResult.success) {
+                    logger.warn(`Empresa não encontrada: ${clientCode}`);
+                    continue; // Pular empresas não encontradas
+                }
+
+                const normalizedCompany = xlsxGeneratorService.normalizeCompany(companyResult.data);
+                normalizedCompanies.push(normalizedCompany);
+            }
+
+            if (normalizedCompanies.length === 0) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Nenhuma das empresas selecionadas foi encontrada'
+                });
+            }
+
+            logger.info(`✅ ${normalizedCompanies.length}/${clientCodes.length} empresas encontradas para processamento`);
+
+            // Gerar planilhas para cada tipo solicitado
+            const tiposParaGerar = tiposPlanilha || ['entrada', 'cobranca'];
+            
+            for (const tipo of tiposParaGerar) {
+                logger.info(`📄 Gerando planilha tipo: ${tipo} para ${normalizedCompanies.length} empresas`);
+                
+                const generationResult = await xlsxGeneratorService.generateSpreadsheetByType(
+                    `Multi_Clientes_${tipo}_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}`, 
+                    normalizedCompanies, 
+                    tipo
+                );
+                
+                if (generationResult.success) {
+                    results.push({
+                        tipo: tipo,
+                        fileName: generationResult.fileName,
+                        filePath: generationResult.filePath,
+                        downloadUrl: `/api/xlsx-generator/download/${generationResult.fileName}`,
+                        viewUrl: `/api/xlsx-generator/view/${generationResult.fileName}`
+                    });
+                }
+            }
+
+            if (results.length === 0) {
+                throw new Error('Falha na geração de todas as planilhas múltiplas');
+            }
+
+            // Limpar arquivos antigos em background
+            setImmediate(() => {
+                xlsxGeneratorService.cleanupOldFiles();
+            });
+
+            return res.json({
+                success: true,
+                message: `${results.length} planilha(s) múltipla(s) gerada(s) com sucesso para ${normalizedCompanies.length} empresas`,
+                data: {
+                    planilhas: results,
+                    clientesProcessados: normalizedCompanies.length,
+                    clientesSolicitados: clientCodes.length,
+                    tiposPlanilha: tiposParaGerar,
+                    enviarSeparado: enviarSeparado,
+                    emailDestinatario: emailDestinatario,
+                    geradoEm: new Date().toISOString()
+                }
             });
 
         } catch (error) {
-            logger.error('❌ Erro ao buscar estatísticas de relatórios', {
-                error: error.message
+            logger.error('❌ Erro ao gerar planilhas múltiplas de entrada', {
+                clientes: req.body.clientCodes,
+                error: error.message,
+                stack: error.stack
             });
 
             return res.status(500).json({
                 success: false,
-                error: 'Erro ao buscar estatísticas',
-                details: error.message
+                error: 'Erro interno do servidor ao gerar planilhas múltiplas de entrada',
+                message: error.message
+            });
+        }
+    }
+
+    // Gerar planilhas múltiplas de SAÍDA para vários clientes
+    async generateMultiSaida(req, res) {
+        try {
+            const { clientCodes } = req.body;
+            
+            if (!clientCodes || !Array.isArray(clientCodes) || clientCodes.length === 0) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'clientCodes (array não vazio) é obrigatório'
+                });
+            }
+
+            logger.info('📊📊 Solicitação de geração múltipla de SAÍDA', { 
+                clientes: clientCodes.length,
+                codigos: clientCodes,
+                usuario: req.user?.email || 'unknown' 
+            });
+
+            const results = [];
+
+            // Gerar planilha de saída para cada cliente
+            for (const clientCode of clientCodes) {
+                logger.info(`📄 Gerando planilha de saída para cliente: ${clientCode}`);
+                
+                const generationResult = await xlsxSaidaGeneratorService.generateSaidaClienteReport(clientCode);
+                
+                if (generationResult.success) {
+                    results.push({
+                        tipo: 'saida',
+                        cliente: clientCode,
+                        fileName: generationResult.fileName,
+                        filePath: generationResult.filePath,
+                        downloadUrl: `/api/xlsx-generator/download/${generationResult.fileName}`,
+                        viewUrl: `/api/xlsx-generator/view/${generationResult.fileName}`
+                    });
+                } else {
+                    logger.warn(`Falha ao gerar saída para cliente ${clientCode}:`, generationResult.error);
+                }
+            }
+
+            if (results.length === 0) {
+                throw new Error('Falha na geração de todas as planilhas múltiplas de saída');
+            }
+
+            // Limpar arquivos antigos em background
+            setImmediate(() => {
+                xlsxGeneratorService.cleanupOldFiles();
+            });
+
+            return res.json({
+                success: true,
+                message: `${results.length} planilha(s) de saída gerada(s) com sucesso para ${clientCodes.length} empresas`,
+                data: {
+                    planilhas: results,
+                    clientesProcessados: results.length,
+                    clientesSolicitados: clientCodes.length,
+                    tipo: 'saida',
+                    geradoEm: new Date().toISOString()
+                }
+            });
+
+        } catch (error) {
+            logger.error('❌ Erro ao gerar planilhas múltiplas de saída', {
+                clientes: req.body.clientCodes,
+                error: error.message,
+                stack: error.stack
+            });
+
+            return res.status(500).json({
+                success: false,
+                error: 'Erro interno do servidor ao gerar planilhas múltiplas de saída',
+                message: error.message
             });
         }
     }

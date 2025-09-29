@@ -112,6 +112,14 @@ export default function UserDashboard({ initialMode }) {
     }
   };
 
+  // Função para definir seleção única (para grupos ou empresas individuais)
+  const setSingleSelection = (item) => {
+    setSelectedItem(item);
+    setSelectedClients([]); // Limpa seleção múltipla
+    setSearchTerm(item.value);
+    setShowDropdown(false);
+  };
+
   // Função para remover cliente da seleção
   const removeClientFromSelection = (clientValue) => {
     setSelectedClients(prev => prev.filter(c => c.value !== clientValue));
@@ -129,8 +137,13 @@ export default function UserDashboard({ initialMode }) {
     // Previne qualquer busca durante a seleção
     isSelectingRef.current = true;
 
-    // Adiciona à seleção múltipla em vez de definir um único item
-    addClientToSelection(item);
+    if (item.type === 'grupo') {
+      // Para grupos, faz seleção única
+      setSingleSelection(item);
+    } else {
+      // Para empresas, adiciona à seleção múltipla
+      addClientToSelection(item);
+    }
 
     // Libera o controle após um breve delay
     setTimeout(() => {
@@ -150,7 +163,7 @@ export default function UserDashboard({ initialMode }) {
     setSearchTerm(value);
 
     // Só limpa a seleção se o valor for diferente do item selecionado
-    if (value !== (selectedItem?.value || '')) {
+    if (selectedItem && value !== selectedItem.value) {
       setSelectedItem(null);
     }
   };
@@ -229,10 +242,12 @@ export default function UserDashboard({ initialMode }) {
   const isValidSelection = () => {
     // Se há múltiplos clientes selecionados, é válido
     if (selectedClients.length > 0) return true;
-    
-    // Caso contrário, verifica seleção única (compatibilidade)
+
+    // Se há item selecionado (único), é válido
     if (selectedItem && selectedItem.type) return true;
-    return !!availableGroups.find(group => group.toLowerCase() === searchTerm.trim().toLowerCase());
+
+    // Verifica se o texto digitado corresponde a um grupo válido nos resultados do autocomplete
+    return autocompleteResults.some(item => item.type === 'grupo' && item.value.toLowerCase() === searchTerm.trim().toLowerCase());
   };
 
   const getSelectedValue = () => selectedItem ? selectedItem.value : searchTerm.trim();
@@ -357,8 +372,6 @@ export default function UserDashboard({ initialMode }) {
               const url = window.URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = planilha.fileName; document.body.appendChild(link); link.click(); document.body.removeChild(link); window.URL.revokeObjectURL(url);
             }
             setSpreadsheetFiles({ ...generateResponse.data.data, geradoEm: generateResponse.data.data.geradoEm || new Date().toISOString() });
-            const tiposNomes = (generateResponse.data.data.planilhas || []).map(p => p.tipo === 'entrada' ? 'Entrada' : 'Honorários').join(' e ');
-            const itemType = selectedItem?.type === 'nome' ? 'empresa' : 'grupo';
             toast.success(`Planilhas de ${tiposNomes} baixadas para ${itemType} ${searchValue} - ${generateResponse.data.data.empresas} empresas! Verifique sua pasta de Downloads.`);
             setSearchTerm(''); setSelectedItem(null);
           }
@@ -624,9 +637,8 @@ export default function UserDashboard({ initialMode }) {
             <p className="text-blue-800 font-medium mb-1">Como usar:</p>
             <ul className="text-blue-700 space-y-1">
               <li>• Digite pelo menos 2 caracteres para pesquisar grupos ou empresas</li>
-              <li>• <Users className="inline w-4 h-4 text-blue-500" /> Grupos aparecem com ícone de pessoas e mostram quantas empresas</li>
-              <li>• <Building2 className="inline w-4 h-4 text-green-500" /> Empresas aparecem com ícone de prédio e código</li>
-              <li>• Clique na opção desejada na lista suspensa para <strong>adicionar à seleção</strong></li>
+              <li>• <Users className="inline w-4 h-4 text-blue-500" /> <strong>Grupos</strong> aparecem com ícone de pessoas - <strong>clique para seleção única</strong></li>
+              <li>• <Building2 className="inline w-4 h-4 text-green-500" /> <strong>Empresas</strong> aparecem com ícone de prédio - <strong>clique para adicionar à seleção múltipla</strong></li>
               <li>• Você pode selecionar <strong>múltiplas empresas</strong> para gerar uma planilha combinada</li>
               <li>• Os clientes selecionados aparecem como tags azuis abaixo do campo de pesquisa</li>
               <li>• Clique no X em cada tag para remover um cliente da seleção</li>

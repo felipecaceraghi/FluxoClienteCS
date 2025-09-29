@@ -115,16 +115,16 @@ router.get('/html/:fileName', (req, res) => {
 // POST /api/xlsx-generator/validate-and-send
 router.post('/validate-and-send', xlsxGeneratorController.validateAndSend);
 
+// Validar e enviar planilhas múltiplas (SEM AUTENTICAÇÃO PARA TESTE)
+// POST /api/xlsx-generator/validate-and-send-multi
+router.post('/validate-and-send-multi', xlsxGeneratorController.validateAndSendMulti);
+
 // Validar e enviar planilhas duplas (SEM AUTENTICAÇÃO PARA TESTE)
 // POST /api/xlsx-generator/validate-and-send-dual
 router.post('/validate-and-send-dual', validateAndSendDual, xlsxGeneratorController.validateAndSendDual);
 
 // Aplicar middleware de autenticação em todas as outras rotas
 router.use(authMiddleware);
-
-// Estatísticas de relatórios
-// GET /api/xlsx-generator/stats
-router.get('/stats', xlsxGeneratorController.getStats);
 
 // Testar envio de email com Python
 // POST /api/xlsx-generator/test-python-email
@@ -220,6 +220,10 @@ router.get('/generate-entrada-cliente/:cliente', xlsxGeneratorController.generat
 // Gerar planilha XLSX para um grupo específico (ENTRADA)
 // GET /api/xlsx-generator/generate/:grupo
 router.get('/generate/:grupo', xlsxGeneratorController.generateForGroup);
+
+// Gerar planilhas múltiplas de ENTRADA para vários clientes
+// POST /api/xlsx-generator/generate-multi-entrada
+router.post('/generate-multi-entrada', xlsxGeneratorController.generateMultiEntrada);
 
 // Gerar planilhas duplas (entrada e cobrança)
 // POST /api/xlsx-generator/generate-dual
